@@ -1,0 +1,372 @@
+{
+  "aps": [
+    {
+      "bssid": "D8:E8:44:58:1F:29",
+      "channel": "10",
+      "essid": "Redaa",
+      "privacy": "WPA2",
+      "power": -78,
+      "clients": []
+    },
+    {
+      "bssid": "E4:CA:12:C0:DC:C2",
+      "channel": "11",
+      "essid": "CARLOS",
+      "privacy": "WPA2 WPA",
+      "power": -44,
+      "clients": []
+    },
+    {
+      "bssid": "28:77:77:C5:12:6C",
+      "channel": "10",
+      "essid": "CasaEli",
+      "privacy": "WPA2",
+      "power": -72,
+      "clients": []
+    },
+    {
+      "bssid": "3C:A7:AE:5B:AA:CA",
+      "channel": "10",
+      "essid": "102",
+      "privacy": "WPA2",
+      "power": -33,
+      "clients": [
+        {
+          "mac": "7C:FD:6B:8F:99:3E",
+          "power": -45
+        }
+      ]
+    },
+    {
+      "bssid": "68:FF:7B:8B:F9:F6",
+      "channel": "11",
+      "essid": "ELEDesignuniverso",
+      "privacy": "WPA2 WPA",
+      "power": -73,
+      "clients": []
+    },
+    {
+      "bssid": "E8:81:75:AD:D1:FC",
+      "channel": "2",
+      "essid": "garygonza",
+      "privacy": "WPA2",
+      "power": -38,
+      "clients": [
+        {
+          "mac": "28:AD:18:96:EA:A1",
+          "power": -51
+        },
+        {
+          "mac": "90:63:3B:0B:6D:2B",
+          "power": -1
+        }
+      ]
+    },
+    {
+      "bssid": "C0:94:AD:3B:00:04",
+      "channel": "1",
+      "essid": "INDOOR3X",
+      "privacy": "WPA2",
+      "power": -76,
+      "clients": []
+    },
+    {
+      "bssid": "B8:DD:71:DD:69:54",
+      "channel": "1",
+      "essid": "Casa1",
+      "privacy": "WPA2",
+      "power": -77,
+      "clients": []
+    },
+    {
+      "bssid": "E8:81:75:AA:65:6C",
+      "channel": "3",
+      "essid": "EPdesign",
+      "privacy": "WPA2",
+      "power": -70,
+      "clients": []
+    },
+    {
+      "bssid": "5C:3A:3D:A7:96:6D",
+      "channel": "3",
+      "essid": "Alexis",
+      "privacy": "WPA2",
+      "power": -74,
+      "clients": []
+    },
+    {
+      "bssid": "A0:09:2E:AC:C5:6A",
+      "channel": "1",
+      "essid": "AleTere",
+      "privacy": "WPA2",
+      "power": -80,
+      "clients": []
+    },
+    {
+      "bssid": "3C:A7:AE:5B:7C:3E",
+      "channel": "7",
+      "essid": "Jessi",
+      "privacy": "WPA2",
+      "power": -72,
+      "clients": []
+    },
+    {
+      "bssid": "C8:5A:9F:A8:30:A0",
+      "channel": "7",
+      "essid": "Joseme",
+      "privacy": "WPA2",
+      "power": -78,
+      "clients": []
+    },
+    {
+      "bssid": "80:AF:CA:3F:DA:CC",
+      "channel": "8",
+      "essid": "Obra Cufre",
+      "privacy": "WPA2",
+      "power": -70,
+      "clients": []
+    },
+    {
+      "bssid": "C0:51:5C:0A:9B:12",
+      "channel": "7",
+      "essid": "Apto 103",
+      "privacy": "WPA2",
+      "power": -61,
+      "clients": []
+    },
+    {
+      "bssid": "82:AF:CA:2F:DA:CC",
+      "channel": "8",
+      "essid": "",
+      "privacy": "WPA2",
+      "power": -68,
+      "clients": []
+    },
+    {
+      "bssid": "A0:09:2E:A9:B7:0C",
+      "channel": "2",
+      "essid": "Cecilia",
+      "privacy": "WPA2",
+      "power": -79,
+      "clients": []
+    },
+    {
+      "bssid": "44:13:D0:9F:A8:ED",
+      "channel": "4",
+      "essid": "Federico",
+      "privacy": "WPA2",
+      "power": -53,
+      "clients": [
+        {
+          "mac": "86:C3:B6:EB:6F:08",
+          "power": -1
+        }
+      ]
+    },
+    {
+      "bssid": "C0:51:5C:0D:B3:12",
+      "channel": "2",
+      "essid": "CasaEli",
+      "privacy": "WPA2",
+      "power": -80,
+      "clients": []
+    },
+    {
+      "bssid": "CC:29:BD:57:85:40",
+      "channel": "3",
+      "essid": "Apto 105",
+      "privacy": "WPA2",
+      "power": -73,
+      "clients": [
+        {
+          "mac": "EA:B7:9E:61:E3:AC",
+          "power": -1
+        }
+      ]
+    },
+    {
+      "bssid": "92:38:F5:64:3E:D1",
+      "channel": "6",
+      "essid": "DCU_PRR",
+      "privacy": "WPA2",
+      "power": -71,
+      "clients": [
+        {
+          "mac": "AC:E0:10:3A:EC:DF",
+          "power": -71
+        },
+        {
+          "mac": "4C:F2:02:CE:33:DE",
+          "power": -67
+        }
+      ]
+    },
+    {
+      "bssid": "E8:81:75:AA:8C:54",
+      "channel": "9",
+      "essid": "",
+      "privacy": "WPA",
+      "power": -81,
+      "clients": [
+        {
+          "mac": "B0:2A:43:37:B1:23",
+          "power": -1
+        }
+      ]
+    },
+    {
+      "bssid": "34:36:54:AA:1A:00",
+      "channel": "4",
+      "essid": "Anto",
+      "privacy": "WPA2",
+      "power": -81,
+      "clients": []
+    },
+    {
+      "bssid": "08:F6:06:89:DB:B2",
+      "channel": "4",
+      "essid": "AMUZBALARI",
+      "privacy": "WPA2",
+      "power": -71,
+      "clients": []
+    },
+    {
+      "bssid": "E8:81:75:AE:B3:EC",
+      "channel": "5",
+      "essid": "Mateo",
+      "privacy": "WPA2",
+      "power": -73,
+      "clients": []
+    },
+    {
+      "bssid": "20:08:89:EA:64:BC",
+      "channel": "5",
+      "essid": "Carolina",
+      "privacy": "WPA2",
+      "power": -76,
+      "clients": []
+    },
+    {
+      "bssid": "64:6E:60:B1:7D:D4",
+      "channel": "11",
+      "essid": "Golden House",
+      "privacy": "WPA2",
+      "power": -76,
+      "clients": []
+    },
+    {
+      "bssid": "E8:81:75:AE:DF:42",
+      "channel": "11",
+      "essid": "EPintos",
+      "privacy": "WPA2",
+      "power": -77,
+      "clients": []
+    },
+    {
+      "bssid": "D8:A4:91:56:51:90",
+      "channel": "6",
+      "essid": "HUAWEI_311_5190",
+      "privacy": "WPA2",
+      "power": -77,
+      "clients": []
+    },
+    {
+      "bssid": "CC:29:BD:57:7F:7C",
+      "channel": "6",
+      "essid": "Oliva&Remolacha",
+      "privacy": "WPA2",
+      "power": -80,
+      "clients": []
+    },
+    {
+      "bssid": "D8:A4:91:56:51:93",
+      "channel": "6",
+      "essid": "",
+      "privacy": "WPA2",
+      "power": -80,
+      "clients": []
+    },
+    {
+      "bssid": "CC:29:BD:89:A4:AE",
+      "channel": "2",
+      "essid": "Dora 2.4",
+      "privacy": "WPA2",
+      "power": -78,
+      "clients": []
+    },
+    {
+      "bssid": "78:90:A2:31:BC:6A",
+      "channel": "8",
+      "essid": "Claudia",
+      "privacy": "WPA2",
+      "power": -80,
+      "clients": []
+    },
+    {
+      "bssid": "F8:79:28:1C:DD:E8",
+      "channel": "8",
+      "essid": "ire",
+      "privacy": "WPA2",
+      "power": -78,
+      "clients": []
+    },
+    {
+      "bssid": "00:4E:35:07:30:E2",
+      "channel": "11",
+      "essid": "SUTEL",
+      "privacy": "WPA3 WPA2",
+      "power": -80,
+      "clients": []
+    },
+    {
+      "bssid": "00:4E:35:07:30:E3",
+      "channel": "11",
+      "essid": "SUTEL_GREMIAL",
+      "privacy": "WPA3 WPA2",
+      "power": -81,
+      "clients": []
+    },
+    {
+      "bssid": "C0:51:5C:0D:63:EC",
+      "channel": "6",
+      "essid": "",
+      "privacy": "",
+      "power": -1,
+      "clients": [
+        {
+          "mac": "E0:D8:C4:2E:76:4A",
+          "power": -77
+        }
+      ]
+    },
+    {
+      "bssid": "A4:F3:3B:11:0E:B8",
+      "channel": "3",
+      "essid": "Valeria",
+      "privacy": "WPA2",
+      "power": -76,
+      "clients": [
+        {
+          "mac": "14:C1:4E:6C:B7:C7",
+          "power": -1
+        }
+      ]
+    },
+    {
+      "bssid": "92:32:4B:45:C2:D9",
+      "channel": "11",
+      "essid": "DIRECT-XNDCP-T510W_BRc2d9",
+      "privacy": "WPA2",
+      "power": -85,
+      "clients": []
+    },
+    {
+      "bssid": "74:9E:75:63:18:43",
+      "channel": "6",
+      "essid": "SUTEL_GREMIAL",
+      "privacy": "WPA3 WPA2",
+      "power": -83,
+      "clients": []
+    }
+  ]
+}

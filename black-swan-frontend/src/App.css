@@ -1,0 +1,19 @@
+body {
+  margin: 0;
+  background: #111;
+  color: #fff;
+  font-family: monospace;
+}
+
+h1 {
+  text-align: center;
+  color: #00e5ff;
+  padding: 1rem;
+}
+
+svg {
+  display: block;
+  margin: 0 auto;
+  border: 1px solid #333;
+  background-color: #222;
+}
