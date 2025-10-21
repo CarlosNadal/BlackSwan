@@ -1,4 +1,5 @@
-# backend/main.py
+# backend/main.py  (agrega estas importaciones/constantes y el endpoint /api/recon)
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
@@ -7,11 +8,13 @@ import os
 import time
 import logging
 from typing import Optional
+import json   # <= new
 
 # --- Config ---
 ROOT = Path(__file__).resolve().parent
 ATTACK_DIR = ROOT / "attack"
 LOGFILE = ROOT / "attack.log"
+RECON_FILE = ROOT / "recon_output.json"   # <= archivo generado por tu parser (ajusta si es otro nombre)
 
 ATTACK_SCRIPTS = {
     "deauth": ATTACK_DIR / "deauth_attack.sh",
@@ -23,6 +26,7 @@ ATTACK_SCRIPTS = {
 # --- Logging ---
 logging.basicConfig(filename=str(LOGFILE), level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
+logging.getLogger().addHandler(logging.StreamHandler())  # también a stdout para dev
 
 app = FastAPI(title="Black Swan Backend")
 
@@ -47,7 +51,6 @@ def read_initial_output(proc, max_lines=20, timeout=0.2):
     out = b""
     err = b""
     try:
-        # poll short time to give process something to output
         time.sleep(timeout)
         if proc.stdout:
             try:
@@ -60,14 +63,12 @@ def read_initial_output(proc, max_lines=20, timeout=0.2):
             except Exception:
                 err = proc.stderr.read(4096) if proc.stderr else b""
     except Exception:
-        # fallback: try communicate with timeout (not preferred)
         try:
             o, e = proc.communicate(timeout=0.1)
             out += o or b""
             err += e or b""
         except Exception:
             pass
-    # decode safely and limit length
     def safe_decode(b):
         try:
             return b.decode(errors="replace")
@@ -76,6 +77,38 @@ def read_initial_output(proc, max_lines=20, timeout=0.2):
     o_dec = safe_decode(out)[:2000]
     e_dec = safe_decode(err)[:2000]
     return o_dec, e_dec
+
+# --- Recon endpoint (nuevo) ---
+@app.get("/api/recon")
+def get_recon():
+    """
+    Devuelve un JSON simple con campo 'aps' que el frontend espera.
+    Busca RECON_FILE en backend/recon_output.json por defecto.
+    """
+    try:
+        if not RECON_FILE.exists():
+            logging.warning(f"Recon file not found: {RECON_FILE}")
+            # devolver estructura vacía para que el frontend no rompa
+            return {"aps": []}
+        raw = RECON_FILE.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        # Si tu parser guarda la lista directamente, una posible forma:
+        # esperamos que 'aps' sea la key; si no, adaptá aquí
+        if isinstance(data, dict) and "aps" in data:
+            aps = data["aps"]
+        elif isinstance(data, list):
+            aps = data
+        else:
+            # intenta mapear keys conocidas de tu formato
+            aps = data.get("aps", []) if isinstance(data, dict) else []
+        return {"aps": aps}
+    except Exception as e:
+        logging.exception("Failed to read recon file")
+        raise HTTPException(status_code=500, detail=f"Failed to load recon data: {e}")
+
+# --- Endpoints --- (resto de tus endpoints ya presentes)
+# pega aquí el resto de tus endpoints: run_attack, attack_status, attack_stop
+# ... (mantén el código que ya tenías para /api/attack, /api/attack/status, /api/attack/stop)
 
 # --- Endpoints ---
 @app.post("/api/attack")
