@@ -1,32 +1,31 @@
-# backend/main.py  (agrega estas importaciones/constantes y el endpoint /api/recon)
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from pathlib import Path
+from typing import Optional
 import subprocess
 import os
 import time
 import logging
-from typing import Optional
-import json   # <= new
+import json   
+import asyncio
+import shlex
 
 # --- Config ---
 ROOT = Path(__file__).resolve().parent
 ATTACK_DIR = ROOT / "attack"
 LOGFILE = ROOT / "attack.log"
-RECON_FILE = ROOT / "recon_output.json"   # <= archivo generado por tu parser (ajusta si es otro nombre)
+RECON_FILE = ROOT / "recon_output.json"   
 
 ATTACK_SCRIPTS = {
     "deauth": ATTACK_DIR / "deauth_attack.sh",
     "handshake": ATTACK_DIR / "capture_handshake.sh",
     "crack": ATTACK_DIR / "crack_handshake.sh",
-    # extend if needed
-}
+    }
 
 # --- Logging ---
 logging.basicConfig(filename=str(LOGFILE), level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
-logging.getLogger().addHandler(logging.StreamHandler())  # también a stdout para dev
+logging.getLogger().addHandler(logging.StreamHandler())  
 
 app = FastAPI(title="Black Swan Backend")
 
@@ -38,7 +37,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 class AttackRequest(BaseModel):
     type: str
     target: str
-    interface: Optional[str] = "wlan0mon"
+    interface: Optional[str] = "wlan0"
     extra: Optional[dict] = {}
 
 # --- Helpers ---
@@ -78,7 +77,7 @@ def read_initial_output(proc, max_lines=20, timeout=0.2):
     e_dec = safe_decode(err)[:2000]
     return o_dec, e_dec
 
-# --- Recon endpoint (nuevo) ---
+# --- Recon endpoint ---
 @app.get("/api/recon")
 def get_recon():
     """
@@ -92,8 +91,6 @@ def get_recon():
             return {"aps": []}
         raw = RECON_FILE.read_text(encoding="utf-8")
         data = json.loads(raw)
-        # Si tu parser guarda la lista directamente, una posible forma:
-        # esperamos que 'aps' sea la key; si no, adaptá aquí
         if isinstance(data, dict) and "aps" in data:
             aps = data["aps"]
         elif isinstance(data, list):
@@ -106,11 +103,6 @@ def get_recon():
         logging.exception("Failed to read recon file")
         raise HTTPException(status_code=500, detail=f"Failed to load recon data: {e}")
 
-# --- Endpoints --- (resto de tus endpoints ya presentes)
-# pega aquí el resto de tus endpoints: run_attack, attack_status, attack_stop
-# ... (mantén el código que ya tenías para /api/attack, /api/attack/status, /api/attack/stop)
-
-# --- Endpoints ---
 @app.post("/api/attack")
 def run_attack(req: AttackRequest):
     attack_type = req.type
@@ -126,7 +118,7 @@ def run_attack(req: AttackRequest):
 
     # sanitize inputs
     target = safe_field(req.target)
-    iface = safe_field(req.interface or "wlan0mon")
+    iface = safe_field(req.interface or "wlan0")
 
     # build command list (no shell)
     cmd = [str(script), "--target", target, "--iface", iface]
@@ -186,3 +178,102 @@ def attack_stop(payload: dict):
     except Exception as e:
         logging.exception("Failed to stop attack")
         raise HTTPException(status_code=500, detail=f"Failed to stop process: {e}")
+
+@app.websocket("/ws/attack")
+async def ws_attack(websocket: WebSocket):
+    """
+    WebSocket en el que el cliente envía JSON:
+      { "type": "<deauth|handshake|crack>", "target": "<BSSID or MAC>", "interface": "wlan0mon" }
+    El servidor:
+      - valida
+      - lanza el script con subprocess
+      - envía mensajes JSON por WebSocket: {"status":"started","pid":...} y luego {"output":"...text..."} por cada línea
+      - al terminar envía {"status":"finished","returncode":int}
+    """
+    await websocket.accept()
+    proc = None
+    try:
+        data = await websocket.receive_json()
+        attack_type = data.get("type")
+        target = data.get("target")
+        iface = data.get("interface", "wlan0mon")
+
+        if not attack_type or attack_type not in ATTACK_SCRIPTS:
+            await websocket.send_json({"error": "unknown attack type"})
+            await websocket.close()
+            return
+
+        script = ATTACK_SCRIPTS[attack_type]
+        if not script.exists() or not os.access(script, os.X_OK):
+            await websocket.send_json({"error": f"script missing or not executable: {script}"})
+            await websocket.close()
+            return
+
+        # sanitize inputs (reuse safe_field)
+        target_s = safe_field(target)
+        iface_s = safe_field(iface)
+
+        cmd = [str(script), "--target", target_s, "--iface", iface_s]
+        # extras if provided in data.extra (optional)
+        extra = data.get("extra") or {}
+        if attack_type == "deauth":
+            mode = extra.get("mode", "silent")
+            if mode in ("silent", "loud"):
+                cmd += ["--mode", mode]
+        if attack_type == "handshake":
+            channel = extra.get("channel")
+            if channel:
+                cmd += ["--channel", str(channel)]
+
+        logging.info("WS executing: %s", " ".join(shlex.quote(x) for x in cmd))
+
+        # start process; combine stdout+stderr to stream everything via stdout
+        # text=True makes stdout.readline() return str (py3.7+)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True, start_new_session=True)
+
+        # notify client started
+        await websocket.send_json({"status": "started", "pid": proc.pid})
+
+        # We will read lines in a threadpool to avoid blocking asyncio
+        loop = asyncio.get_running_loop()
+        while True:
+            # read a line without blocking the event loop
+            line = await loop.run_in_executor(None, proc.stdout.readline)
+            if line == "" and proc.poll() is not None:
+                # process finished and no more output
+                break
+            if line:
+                # send output chunk
+                try:
+                    await websocket.send_json({"output": line})
+                except Exception:
+                    # if send fails (client disconnected), break and try to terminate the process
+                    break
+
+        # wait for final returncode
+        rc = proc.poll()
+        if rc is None:
+            rc = proc.wait(timeout=1)
+        await websocket.send_json({"status": "finished", "returncode": rc})
+        await websocket.close()
+    except WebSocketDisconnect:
+        logging.info("Client disconnected, attempting to kill process")
+        # client disconnected; kill the process if running
+        try:
+            if proc and proc.poll() is None:
+                proc.kill()
+        except Exception as e:
+            logging.exception("Failed to kill process after disconnect: %s", e)
+    except Exception as e:
+        logging.exception("ws_attack error")
+        try:
+            await websocket.send_json({"error": str(e)})
+            await websocket.close()
+        except Exception:
+            pass
+        # ensure child killed
+        try:
+            if proc and proc.poll() is None:
+                proc.kill()
+        except Exception:
+            pass

@@ -1,151 +1,447 @@
-import React, { useEffect, useRef, useState } from "react";
-import ForceGraph2D from "react-force-graph-2d";
-import axios from "axios";
+import { useEffect, useRef, useState } from "react";
+import * as d3 from "d3";
+import "./App.css";
 
-export default function BlackSwanRecon() {
-  const [data, setData] = useState({ nodes: [], links: [] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [contextMenu, setContextMenu] = useState(null);
+function App() {
+  const svgRef = useRef();
+  const [data, setData] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
-  const fgRef = useRef();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [showLegend, setShowLegend] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Use full host to avoid dev server proxy issues
-        const res = await axios.get("http://localhost:8000/api/recon", { timeout: 5000 });
-        console.log("API /api/recon response:", res.data);
-        const aps = Array.isArray(res.data.aps) ? res.data.aps : [];
-        const nodes = [];
-        const links = [];
+    fetch("http://localhost:8000/api/recon")
+      .then((res) => res.json())
+      .then(setData);
+  }, []);
 
-        // if no aps, keep nodes empty (we'll show message)
-        aps.forEach((ap) => {
-          const apId = ap.bssid || `ap-${Math.random().toString(36).slice(2,7)}`;
-          nodes.push({
-            id: apId,
-            name: ap.essid || apId,
-            type: "ap",
-            signal: ap.power ?? null,
-            encryption: ap.privacy ?? null
+  useEffect(() => {
+    if (!data) return;
+
+    const updateDimensions = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const headerHeight = 70;
+      
+      const nodes = [];
+      const links = [];
+
+      const sortedAps = [...data.aps].sort((a, b) => b.power - a.power);
+
+      sortedAps.forEach((ap) => {
+        nodes.push({ 
+          id: ap.bssid, 
+          label: ap.essid || ap.bssid, 
+          type: "ap",
+          data: ap
+        });
+        
+        const sortedClients = [...ap.clients].sort((a, b) => b.power - a.power);
+        
+        sortedClients.forEach((client) => {
+          nodes.push({ 
+            id: client.mac, 
+            label: client.mac, 
+            type: "client",
+            data: client
           });
+          links.push({ source: ap.bssid, target: client.mac });
+        });
+      });
 
-          if (Array.isArray(ap.clients)) {
-            ap.clients.forEach((client) => {
-              const clientId = client.mac || `c-${Math.random().toString(36).slice(2,7)}`;
-              nodes.push({
-                id: clientId,
-                name: clientId,
-                type: "client",
-                signal: client.power ?? null,
-                connected_to: apId
-              });
-              links.push({ source: apId, target: clientId });
-            });
-          }
+      const svg = d3.select(svgRef.current)
+        .attr("width", width)
+        .attr("height", height);
+
+      svg.selectAll("*").remove();
+
+      const forceBoundary = (alpha) => {
+        const padding = 60;
+        const topPadding = headerHeight + padding;
+        for (const node of nodes) {
+          node.x = Math.max(padding, Math.min(width - padding, node.x));
+          node.y = Math.max(topPadding, Math.min(height - padding, node.y));
+        }
+      };
+
+      const simulation = d3.forceSimulation(nodes)
+        .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+        .force("charge", d3.forceManyBody().strength(-150))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide().radius(35))
+        .force("boundary", forceBoundary)
+        .force("radial", d3.forceRadial(
+          Math.min(width, height) * 0.25,
+          width / 2,
+          height / 2
+        ).strength(0.2));
+
+      const link = svg.append("g")
+        .attr("stroke", "#ffeb3b")
+        .attr("stroke-opacity", 0.7)
+        .selectAll("line")
+        .data(links)
+        .join("line")
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "3,3");
+
+      const calculateNodeSize = (node) => {
+        if (node.type === "ap") {
+          const power = node.data.power;
+          const normalizedPower = Math.max(0, Math.min(1, (power + 80) / 60));
+          return 18 + (normalizedPower * 12);
+        } else {
+          const power = node.data.power;
+          const normalizedPower = Math.max(0, Math.min(1, (power + 80) / 60));
+          return 12 + (normalizedPower * 10);
+        }
+      };
+
+      const calculateNodeColor = (node) => {
+        const power = node.data.power;
+        if (power >= -30) return "#ffeb3b";
+        if (power >= -50) return "#ff9800";
+        if (power >= -70) return "#ff5722";
+        return "#795548";
+      };
+
+      const node = svg.append("g")
+        .selectAll("circle")
+        .data(nodes)
+        .join("circle")
+        .attr("r", d => calculateNodeSize(d))
+        .attr("fill", d => calculateNodeColor(d))
+        .attr("stroke", d => d.type === "ap" ? "#fbc02d" : "#f57c00")
+        .attr("stroke-width", 2)
+        .style("cursor", "pointer")
+        .style("filter", "drop-shadow(0 0 8px rgba(255, 235, 59, 0.6))")
+        .call(drag(simulation))
+        .on("click", (event, d) => {
+          setSelectedNode(d);
+          setModalOpen(true);
+        })
+        .on("mouseover", function(event, d) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr("r", calculateNodeSize(d) + 4)
+            .style("filter", "drop-shadow(0 0 12px rgba(255, 235, 59, 0.8))");
+        })
+        .on("mouseout", function(event, d) {
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr("r", calculateNodeSize(d))
+            .style("filter", "drop-shadow(0 0 8px rgba(255, 235, 59, 0.6))");
         });
 
-        // dedupe nodes by id
-        const deduped = Object.values(nodes.reduce((acc, n) => { acc[n.id]=n; return acc; }, {}));
-        setData({ nodes: deduped, links });
-      } catch (e) {
-        console.error("Error fetching /api/recon:", e);
-        setError(e.message || "Unknown error");
-      } finally {
-        setLoading(false);
+      const label = svg.append("g")
+        .selectAll("text")
+        .data(nodes)
+        .join("text")
+        .text(d => {
+          if (d.type === "client" && d.label.length > 10) {
+            return d.label.substring(0, 8) + "...";
+          }
+          if (d.type === "ap" && d.label.length > 12) {
+            return d.label.substring(0, 10) + "...";
+          }
+          return d.label;
+        })
+        .attr("text-anchor", "middle")
+        .attr("dy", 4)
+        .attr("font-size", "10px")
+        .attr("font-weight", "bold")
+        .attr("fill", "#000")
+        .style("pointer-events", "none")
+        .style("text-shadow", "1px 1px 2px rgba(255, 255, 255, 0.8)");
+
+      simulation.on("tick", () => {
+        node.attr("cx", d => d.x).attr("cy", d => d.y);
+        label.attr("x", d => d.x).attr("y", d => d.y);
+        link.attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+      });
+
+      function drag(simulation) {
+        return d3.drag()
+          .on("start", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+          })
+          .on("drag", (event, d) => {
+            d.fx = event.x;
+            d.fy = event.y;
+          })
+          .on("end", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+          });
       }
     };
 
-    fetchData();
-    // optional: poll every 10s
-    // const id = setInterval(fetchData, 10000);
-    // return () => clearInterval(id);
-  }, []);
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    
+    return () => {
+      window.removeEventListener("resize", updateDimensions);
+    };
+  }, [data]);
 
-  const onNodeRightClick = (node, event) => {
-    event.preventDefault();
-    setSelectedNode(node);
-    setContextMenu({ x: event.clientX, y: event.clientY });
+  const closeModal = () => {
+    setModalOpen(false);
+    setSelectedNode(null);
   };
 
-  const handleAttack = async (type) => {
-    if (!selectedNode) return;
-    setContextMenu(null);
-
-    try {
-      const payload = { type, target: selectedNode.id, interface: "wlan0mon" };
-      const res = await axios.post("http://localhost:8000/api/attack", payload, { timeout: 2000 });
-      alert(`Started ${type} on ${selectedNode.id} (server pid: ${res.data.pid ?? "n/a"})`);
-      console.log("attack started response:", res.data);
-    } catch (err) {
-      console.error("attack error:", err);
-      alert("Attack failed: " + (err.response?.data?.detail || err.message));
-    }
+  const getPowerLevel = (power) => {
+    if (power >= -30) return "Muy Cercano";
+    if (power >= -50) return "Cercano";
+    if (power >= -70) return "Medio";
+    return "Lejano";
   };
 
-  // draw labels and different sizes
-  const nodeCanvas = (node, ctx, globalScale) => {
-    const label = node.name || node.id;
-    const fontSize = 12 / globalScale;
-    ctx.beginPath();
-    ctx.fillStyle = node.type === "ap" ? "#00bcd4" : "#4caf50";
-    const r = node.type === "ap" ? 16 : 10;
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false);
-    ctx.fill();
-
-    ctx.font = `${fontSize}px Sans-Serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(label, node.x, node.y + (r + 2));
+  const getPowerColor = (power) => {
+    if (power >= -30) return "#4caf50";
+    if (power >= -50) return "#ff9800";
+    if (power >= -70) return "#ff5722";
+    return "#795548";
   };
 
   return (
-    <div style={{ backgroundColor: "#0b0b0b", height: "100vh", color: "cyan", padding: 10 }}>
-      <h2 style={{ color: "cyan", textAlign: "center", margin: 8 }}>Black Swan — WiFi Recon</h2>
+    <div className="App">
+      <header className="app-header">
+        <h1>Black Swan — WiFi Recon</h1>
+        <p>Visualización de redes y dispositivos conectados</p>
+      </header>
+      
+      <svg ref={svgRef} className="fullscreen-svg"></svg>
 
-      {loading && <div style={{ color: "#9ad", textAlign: "center" }}>Loading recon data...</div>}
-      {error && <div style={{ color: "tomato", textAlign: "center" }}>Error: {error}</div>}
-      {!loading && !error && data.nodes.length === 0 && (
-        <div style={{ color: "#9ad", textAlign: "center" }}>
-          No APs found. Run `parse_airodump.py` to generate recon_output.json or load a test JSON.
+      {/* Leyenda flotante */}
+      {showLegend && (
+        <div className="legend-panel">
+          <div className="legend-header">
+            <h3>Leyenda de Señal WiFi</h3>
+            <button 
+              className="legend-toggle"
+              onClick={() => setShowLegend(false)}
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="legend-content">
+            <div className="legend-section">
+              <h4>Intensidad de Señal</h4>
+              <div className="legend-items">
+                <div className="legend-item">
+                  <div className="color-dot" style={{ backgroundColor: '#ffeb3b' }}></div>
+                  <div className="legend-text">
+                    <strong>Excelente (-30 dBm o mejor)</strong>
+                    <span>Muy cercano - Señal óptima</span>
+                  </div>
+                </div>
+                <div className="legend-item">
+                  <div className="color-dot" style={{ backgroundColor: '#ff9800' }}></div>
+                  <div className="legend-text">
+                    <strong>Bueno (-30 a -50 dBm)</strong>
+                    <span>Cercano - Buena conexión</span>
+                  </div>
+                </div>
+                <div className="legend-item">
+                  <div className="color-dot" style={{ backgroundColor: '#ff5722' }}></div>
+                  <div className="legend-text">
+                    <strong>Regular (-50 a -70 dBm)</strong>
+                    <span>Distancia media - Conexión aceptable</span>
+                  </div>
+                </div>
+                <div className="legend-item">
+                  <div className="color-dot" style={{ backgroundColor: '#795548' }}></div>
+                  <div className="legend-text">
+                    <strong>Débil (menos de -70 dBm)</strong>
+                    <span>Lejano - Señal pobre</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="legend-section">
+              <h4>Tamaño de los Nodos</h4>
+              <div className="legend-items">
+                <div className="legend-item">
+                  <div className="size-dots">
+                    <div className="size-dot large"></div>
+                    <div className="size-dot medium"></div>
+                    <div className="size-dot small"></div>
+                  </div>
+                  <div className="legend-text">
+                    <strong>Señal más fuerte → Nodo más grande</strong>
+                    <span>El tamaño indica la potencia de la señal</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="legend-section">
+              <h4>Tipos de Dispositivos</h4>
+              <div className="legend-items">
+                <div className="legend-item">
+                  <div className="device-type ap">
+                    <div className="device-icon">📡</div>
+                  </div>
+                  <div className="legend-text">
+                    <strong>Puntos de Acceso (AP)</strong>
+                    <span>Routers WiFi y hotspots</span>
+                  </div>
+                </div>
+                <div className="legend-item">
+                  <div className="device-type client">
+                    <div className="device-icon">📱</div>
+                  </div>
+                  <div className="legend-text">
+                    <strong>Dispositivos Clientes</strong>
+                    <span>Teléfonos, laptops, etc.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="legend-footer">
+            <button 
+              className="btn-minimize"
+              onClick={() => setShowLegend(false)}
+            >
+              Minimizar
+            </button>
+          </div>
         </div>
       )}
 
-      <div style={{ height: "80vh" }}>
-        <ForceGraph2D
-          ref={fgRef}
-          graphData={data}
-          nodeLabel="name"
-          nodePointerAreaPaint={(node, color, ctx) => {
-            // pointer area larger
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, node.type === "ap" ? 18 : 12, 0, 2 * Math.PI, false);
-            ctx.fill();
-          }}
-          nodeCanvasObject={nodeCanvas}
-          onNodeRightClick={onNodeRightClick}
-          width={window.innerWidth - 20}
-          height={(window.innerHeight * 0.8)}
-        />
-      </div>
+      {/* Botón para mostrar leyenda cuando está minimizada */}
+      {!showLegend && (
+        <button 
+          className="legend-show-btn"
+          onClick={() => setShowLegend(true)}
+        >
+          📊 Mostrar Leyenda
+        </button>
+      )}
 
-      {contextMenu && (
-        <div style={{
-          position: "absolute", top: contextMenu.y, left: contextMenu.x,
-          backgroundColor: "#222", color: "#fff", padding: 10, borderRadius: 8, zIndex: 1000
-        }}>
-          <div style={{ marginBottom: 6 }}>🎯 Attacks for: {selectedNode?.id}</div>
-          <button onClick={() => handleAttack("deauth")}>💣 Deauth</button><br />
-          <button onClick={() => handleAttack("handshake")}>💍 Handshake</button><br />
-          <button onClick={() => handleAttack("crack")}>🔓 Crack</button><br />
-          <button onClick={() => setContextMenu(null)}>❌ Cancel</button>
+      {modalOpen && selectedNode && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>
+                {selectedNode.type === "ap" ? "Punto de Acceso WiFi" : "Dispositivo Cliente"}
+              </h2>
+              <button className="close-button" onClick={closeModal}>×</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="info-section">
+                <h3>Información básica</h3>
+                <div className="info-grid">
+                  <div className="info-item">
+                    <span className="info-label">Tipo:</span>
+                    <span className="info-value">
+                      {selectedNode.type === "ap" ? "Punto de Acceso" : "Dispositivo Cliente"}
+                    </span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">ID:</span>
+                    <span className="info-value">{selectedNode.id}</span>
+                  </div>
+                  {selectedNode.type === "ap" && (
+                    <div className="info-item">
+                      <span className="info-label">Nombre (ESSID):</span>
+                      <span className="info-value">{selectedNode.data.essid || "Oculto"}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="info-section">
+                <h3>Datos de señal</h3>
+                <div className="info-grid">
+                  <div className="info-item">
+                    <span className="info-label">Potencia de señal:</span>
+                    <span 
+                      className="info-value" 
+                      style={{ 
+                        color: getPowerColor(selectedNode.data.power),
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {selectedNode.data.power} dBm
+                    </span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Nivel:</span>
+                    <span 
+                      className="info-value"
+                      style={{ 
+                        color: getPowerColor(selectedNode.data.power),
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {getPowerLevel(selectedNode.data.power)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedNode.type === "ap" && (
+                <>
+                  <div className="info-section">
+                    <h3>Configuración de red</h3>
+                    <div className="info-grid">
+                      <div className="info-item">
+                        <span className="info-label">Canal:</span>
+                        <span className="info-value">{selectedNode.data.channel || "N/A"}</span>
+                      </div>
+                      <div className="info-item">
+                        <span className="info-label">Seguridad:</span>
+                        <span className="info-value">{selectedNode.data.privacy || "Desconocido"}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="info-section">
+                    <h3>Dispositivos conectados</h3>
+                    <div className="clients-list">
+                      {selectedNode.data.clients && selectedNode.data.clients.length > 0 ? (
+                        selectedNode.data.clients.map((client, index) => (
+                          <div key={index} className="client-item">
+                            <div className="client-mac">{client.mac}</div>
+                            <div className="client-power">
+                              <span>Señal: </span>
+                              <span style={{ color: getPowerColor(client.power), fontWeight: 'bold' }}>
+                                {client.power} dBm ({getPowerLevel(client.power)})
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="no-clients">No hay dispositivos conectados</div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <div className="modal-footer">
+              <button className="btn-close" onClick={closeModal}>Cerrar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
+
+export default App;
