@@ -3,7 +3,7 @@
 > *"When the attack is silent, invisible, and real… you need a new way to see."*
 
 * * *
-![Logo de BlackSwan](BlackSwan.png)
+![Logo de BlackSwan](/black-swan-frontend/public/BlackSwan.png)
 
 ### 🦢 **Black Swan**
 
@@ -38,33 +38,8 @@ Con una visualización inspirada en el estilo gráfico de BloodHound, llevamos l
 | --- | --- |
 | 🔎 Visual Recon | Escanea redes y dispositivos con `airodump-ng`, parsea CSV y genera un grafo |
 | 🧬 Score Inteligente | Calcula vulnerabilidad por señal, cifrado y clientes conectados |
-| 🧨 Ataques desde la UI | Deauth unicast/broadcast, captura handshake, PMKID, Evil Twin, etc. |
-| 🧠 Educativo y ofensivo | Sirve tanto para pentesters como para entrenamientos y pruebas de aula |
-| 🛰️ Modular y escalable | Cada nodo (AP o cliente) es un punto de ataque interactivo |
+| 🧠 Defensivo y Ofensivo | Sirve tanto para monitorear que no tenes una amenaza desconocida como para red team | |
 | 🧿 Interfaz hacker moderna | Grafo real en D3.js + backend FastAPI + scripts shell/python |
-
-* * *
-
-## 💣 Ataques integrados (y contando...)
-
-- 🔥 Deauth (unicast & broadcast)
-    
-- 💍 WPA/WPA2 handshake + crackeo
-    
-- 🧿 PMKID attack
-    
-- 👯 Evil Twin (con hostapd)
-    
-- 🎭 Captive Portal
-    
-- 🧲 Rogue DHCP
-    
-- 🛑 Beacon Flood
-    
-- 📱 MAC spoof
-    
-
-Y todo esto desde un solo panel.
 
 * * *
 
@@ -76,24 +51,7 @@ Black Swan no es una amenaza.
 Es una **alerta visual**.
 
 Una herramienta para entender cómo un atacante ve tu red.  
-Y una plataforma para simular, probar y enseñar defensa.
 
-* * *
-
-## 🔜 ¿Qué sigue?
-
-- Módulo visual inicial (grafo)
-    
-- Ataques básicos
-    
-- Live recon auto-actualizable
-    
-- Export de reportes
-    
-- Modo defensa (detección de scans, fingerprinting de atacantes)
-    
-- DEMO pública online
-    
 
 * * *
 
