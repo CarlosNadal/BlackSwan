@@ -9,7 +9,7 @@ import signal
 import sys
 import traceback
 import threading
-from flask import Flask, request, jsonify  # ✅ Añadir request aquí
+from flask import Flask, request, jsonify  
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
@@ -294,7 +294,16 @@ if __name__ == "__main__":
         print("👂 Esperando conexiones...")
         print("-" * 50)
         
-        socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
+        # Usar eventlet si está disponible, sino el servidor de desarrollo
+        try:
+            import eventlet
+            eventlet.monkey_patch()
+            socketio.run(app, host='0.0.0.0', port=PORT, debug=False, 
+                        use_reloader=False, log_output=True)
+        except ImportError:
+            print("⚠️  eventlet no disponible, usando servidor de desarrollo")
+            socketio.run(app, host='0.0.0.0', port=PORT, debug=False, 
+                        allow_unsafe_werkzeug=True)
         
     except KeyboardInterrupt:
         print("\n🛑 Interrupción por teclado")

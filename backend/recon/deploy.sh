@@ -106,7 +106,7 @@ echo "✅ Systemd recargado"
 # Paso 5: Probar que el código funciona
 echo ""
 echo "🧪 Paso 5: Probando instalación..."
-if ! source venv/bin/activate && python3 -c "import flask, flask_socketio, flask_cors; print('✅ Importaciones OK')"; then
+if ! source venv/bin/activate && python3 -c "import flask, flask_socketio, flask_cors, eventlet; print('✅ Importaciones OK')"; then
     echo "❌ Error en las dependencias Python"
     exit 1
 fi
