@@ -648,3 +648,36 @@ body {
     left: 20px;
   }
 }
+.connection-status {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  z-index: 1000;
+  border-left: 4px solid #4caf50;
+  max-width: 400px;
+  backdrop-filter: blur(10px);
+}
+
+.connection-status.conectado .status-indicator {
+  background: #4caf50;
+  box-shadow: 0 0 8px #4caf50;
+}
+
+.connection-status.desconectado {
+  border-left-color: #f44336;
+}
+
+.connection-status.error {
+  background-color: #ff9800;
+  color: white;
+}
+
+.networks-count {
+  margin-left: 8px;
+  opacity: 0.9;
+}

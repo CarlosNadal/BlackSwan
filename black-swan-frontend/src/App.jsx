@@ -10,10 +10,43 @@ function App() {
   const [showLegend, setShowLegend] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/recon")
-      .then((res) => res.json())
-      .then(setData);
+    const ws = new WebSocket("ws://localhost:8000/ws/recon");
+  
+    ws.onopen = () => {
+      console.log("✅ Conectado al WebSocket del backend");
+    };
+  
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        // Si el backend envía datos tipo { aps: [...] }
+        if (message.aps) {
+          setData(message);
+        } else {
+          console.warn("Mensaje desconocido recibido:", message);
+        }
+      } catch (err) {
+        console.error("Error al parsear datos del WebSocket:", err);
+      }
+    };
+  
+    ws.onerror = (error) => {
+      console.error("❌ Error en WebSocket:", error);
+    };
+  
+    ws.onclose = () => {
+      console.warn("⚠️ WebSocket cerrado, reconectando en 3s...");
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+    };
+  
+    // Limpieza
+    return () => {
+      ws.close();
+    };
   }, []);
+  
 
   useEffect(() => {
     if (!data) return;

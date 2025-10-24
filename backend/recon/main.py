@@ -1,279 +1,306 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
-from pathlib import Path
-from typing import Optional
+#!/usr/bin/env python3
+import csv
+import json
 import subprocess
+from pathlib import Path
 import os
 import time
-import logging
-import json   
-import asyncio
-import shlex
+import signal
+import sys
+import traceback
+import threading
+from flask import Flask, request, jsonify  # ✅ Añadir request aquí
+from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 
-# --- Config ---
-ROOT = Path(__file__).resolve().parent
-ATTACK_DIR = ROOT / "attack"
-LOGFILE = ROOT / "attack.log"
-RECON_FILE = ROOT / "recon_output.json"   
+INTERFACE = os.environ.get("INTERFACE", "wlan0")
+PORT = int(os.environ.get("PORT", "8000"))
+CSV_PREFIX = "/tmp/airodump_capture"
 
-ATTACK_SCRIPTS = {
-    "deauth": ATTACK_DIR / "deauth_attack.sh",
-    "handshake": ATTACK_DIR / "capture_handshake.sh",
-    "crack": ATTACK_DIR / "crack_handshake.sh",
-    }
+# Configurar Flask y SocketIO
+app = Flask(__name__)
+CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
 
-# --- Logging ---
-logging.basicConfig(filename=str(LOGFILE), level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(message)s")
-logging.getLogger().addHandler(logging.StreamHandler())  
+# Variables globales
+proc = None
+clients_count = 0
+scanner_running = True
 
-app = FastAPI(title="Black Swan Backend")
-
-# allow simple CORS for dev
-from fastapi.middleware.cors import CORSMiddleware
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# --- Models ---
-class AttackRequest(BaseModel):
-    type: str
-    target: str
-    interface: Optional[str] = "wlan0"
-    extra: Optional[dict] = {}
-
-# --- Helpers ---
-def safe_field(val: str) -> str:
-    # allow alnum, colon, dash, underscore
-    return "".join([c for c in str(val) if c.isalnum() or c in ":-_"]).strip()
-
-def read_initial_output(proc, max_lines=20, timeout=0.2):
-    """Non-blocking attempt to read some stdout/stderr lines after starting process."""
-    out = b""
-    err = b""
-    try:
-        time.sleep(timeout)
-        if proc.stdout:
-            try:
-                out = proc.stdout.read1(4096)
-            except Exception:
-                out = proc.stdout.read(4096) if proc.stdout else b""
-        if proc.stderr:
-            try:
-                err = proc.stderr.read1(4096)
-            except Exception:
-                err = proc.stderr.read(4096) if proc.stderr else b""
-    except Exception:
+# ---------------- airodump launcher ----------------
+def start_airodump_csv():
+    for p in Path("/tmp").glob("airodump_capture*"):
         try:
-            o, e = proc.communicate(timeout=0.1)
-            out += o or b""
-            err += e or b""
+            p.unlink()
         except Exception:
             pass
-    def safe_decode(b):
-        try:
-            return b.decode(errors="replace")
-        except Exception:
-            return str(b)
-    o_dec = safe_decode(out)[:2000]
-    e_dec = safe_decode(err)[:2000]
-    return o_dec, e_dec
 
-# --- Recon endpoint ---
-@app.get("/api/recon")
-def get_recon():
-    """
-    Devuelve un JSON simple con campo 'aps' que el frontend espera.
-    Busca RECON_FILE en backend/recon_output.json por defecto.
-    """
+    cmd = [
+        "airodump-ng",
+        "--write-interval", "1",
+        "--output-format", "csv",
+        "-w", CSV_PREFIX,
+        INTERFACE
+    ]
     try:
-        if not RECON_FILE.exists():
-            logging.warning(f"Recon file not found: {RECON_FILE}")
-            # devolver estructura vacía para que el frontend no rompa
-            return {"aps": []}
-        raw = RECON_FILE.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        if isinstance(data, dict) and "aps" in data:
-            aps = data["aps"]
-        elif isinstance(data, list):
-            aps = data
-        else:
-            # intenta mapear keys conocidas de tu formato
-            aps = data.get("aps", []) if isinstance(data, dict) else []
-        return {"aps": aps}
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"[scanner] airodump-ng lanzado como PID {proc.pid} en interfaz {INTERFACE}")
+        return proc
+    except FileNotFoundError:
+        print("[ERROR] airodump-ng no encontrado")
+        sys.exit(1)
     except Exception as e:
-        logging.exception("Failed to read recon file")
-        raise HTTPException(status_code=500, detail=f"Failed to load recon data: {e}")
+        print(f"[ERROR] al lanzar airodump-ng: {e}")
+        sys.exit(1)
 
-@app.post("/api/attack")
-def run_attack(req: AttackRequest):
-    attack_type = req.type
-    if attack_type not in ATTACK_SCRIPTS:
-        raise HTTPException(status_code=400, detail="Unknown attack type")
+# ---------------- CSV parsing ----------------
+def find_csv():
+    candidates = sorted(Path("/tmp").glob("airodump_capture-*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
 
-    script = ATTACK_SCRIPTS[attack_type]
-    if not script.exists():
-        raise HTTPException(status_code=500, detail=f"Script for {attack_type} missing on server")
+def _is_sep_row(row):
+    if row is None:
+        return False
+    if len(row) == 0:
+        return True
+    return all((cell is None or str(cell).strip() == "") for cell in row)
 
-    if not os.access(script, os.X_OK):
-        raise HTTPException(status_code=500, detail=f"Script {script} not executable. chmod +x required.")
-
-    # sanitize inputs
-    target = safe_field(req.target)
-    iface = safe_field(req.interface or "wlan0")
-
-    # build command list (no shell)
-    cmd = [str(script), "--target", target, "--iface", iface]
-
-    # add safe extras per type (explicit)
-    if attack_type == "deauth":
-        mode = req.extra.get("mode", "silent") if req.extra else "silent"
-        if mode not in ("silent", "loud"):
-            raise HTTPException(status_code=400, detail="Invalid mode")
-        cmd += ["--mode", mode]
-    if attack_type == "handshake":
-        channel = req.extra.get("channel") if req.extra else None
-        if channel:
-            cmd += ["--channel", str(channel)]
-
-    logging.info(f"Request run_attack type={attack_type} target={target} iface={iface} extra={req.extra}")
+def parse_airodump_csv(csv_file: Path):
+    aps = []
+    if not csv_file or not csv_file.exists():
+        return aps
 
     try:
-        # start process asynchronously, capture pipes
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
-        pid = proc.pid
-        # read any immediate output to return for debug
-        out_sample, err_sample = read_initial_output(proc)
-        logging.info(f"Started {attack_type} pid={pid}")
-        return {"status": "started", "pid": pid, "stdout_preview": out_sample, "stderr_preview": err_sample}
-    except Exception as e:
-        logging.exception("Failed to start attack")
-        raise HTTPException(status_code=500, detail=f"Failed to start attack: {e}")
+        with open(csv_file, newline="", encoding="utf-8", errors="ignore") as f:
+            reader = csv.reader(f)
+            rows = [r for r in reader]
 
-@app.get("/api/attack/status")
-def attack_status(pid: int):
-    try:
-        # os.kill(pid, 0) checks existence without killing
-        os.kill(pid, 0)
-        return {"pid": pid, "alive": True}
-    except ProcessLookupError:
-        return {"pid": pid, "alive": False}
-    except PermissionError:
-        return {"pid": pid, "alive": True, "note": "process exists but permission-limited"}
-
-@app.post("/api/attack/stop")
-def attack_stop(payload: dict):
-    pid = int(payload.get("pid", 0))
-    if pid <= 0:
-        raise HTTPException(status_code=400, detail="Invalid pid")
-    try:
-        os.kill(pid, 15)  # SIGTERM
-        time.sleep(0.5)
-        # if still alive, SIGKILL
-        try:
-            os.kill(pid, 0)
-            os.kill(pid, 9)
-        except ProcessLookupError:
-            pass
-        logging.info(f"Stopped attack pid={pid}")
-        return {"status": "stopped", "pid": pid}
-    except Exception as e:
-        logging.exception("Failed to stop attack")
-        raise HTTPException(status_code=500, detail=f"Failed to stop process: {e}")
-
-@app.websocket("/ws/attack")
-async def ws_attack(websocket: WebSocket):
-    """
-    WebSocket en el que el cliente envía JSON:
-      { "type": "<deauth|handshake|crack>", "target": "<BSSID or MAC>", "interface": "wlan0mon" }
-    El servidor:
-      - valida
-      - lanza el script con subprocess
-      - envía mensajes JSON por WebSocket: {"status":"started","pid":...} y luego {"output":"...text..."} por cada línea
-      - al terminar envía {"status":"finished","returncode":int}
-    """
-    await websocket.accept()
-    proc = None
-    try:
-        data = await websocket.receive_json()
-        attack_type = data.get("type")
-        target = data.get("target")
-        iface = data.get("interface", "wlan0mon")
-
-        if not attack_type or attack_type not in ATTACK_SCRIPTS:
-            await websocket.send_json({"error": "unknown attack type"})
-            await websocket.close()
-            return
-
-        script = ATTACK_SCRIPTS[attack_type]
-        if not script.exists() or not os.access(script, os.X_OK):
-            await websocket.send_json({"error": f"script missing or not executable: {script}"})
-            await websocket.close()
-            return
-
-        # sanitize inputs (reuse safe_field)
-        target_s = safe_field(target)
-        iface_s = safe_field(iface)
-
-        cmd = [str(script), "--target", target_s, "--iface", iface_s]
-        # extras if provided in data.extra (optional)
-        extra = data.get("extra") or {}
-        if attack_type == "deauth":
-            mode = extra.get("mode", "silent")
-            if mode in ("silent", "loud"):
-                cmd += ["--mode", mode]
-        if attack_type == "handshake":
-            channel = extra.get("channel")
-            if channel:
-                cmd += ["--channel", str(channel)]
-
-        logging.info("WS executing: %s", " ".join(shlex.quote(x) for x in cmd))
-
-        # start process; combine stdout+stderr to stream everything via stdout
-        # text=True makes stdout.readline() return str (py3.7+)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True, start_new_session=True)
-
-        # notify client started
-        await websocket.send_json({"status": "started", "pid": proc.pid})
-
-        # We will read lines in a threadpool to avoid blocking asyncio
-        loop = asyncio.get_running_loop()
-        while True:
-            # read a line without blocking the event loop
-            line = await loop.run_in_executor(None, proc.stdout.readline)
-            if line == "" and proc.poll() is not None:
-                # process finished and no more output
+        sep_idx = None
+        for i, row in enumerate(rows):
+            if _is_sep_row(row):
+                sep_idx = i
                 break
-            if line:
-                # send output chunk
-                try:
-                    await websocket.send_json({"output": line})
-                except Exception:
-                    # if send fails (client disconnected), break and try to terminate the process
-                    break
 
-        # wait for final returncode
-        rc = proc.poll()
-        if rc is None:
-            rc = proc.wait(timeout=1)
-        await websocket.send_json({"status": "finished", "returncode": rc})
-        await websocket.close()
-    except WebSocketDisconnect:
-        logging.info("Client disconnected, attempting to kill process")
-        # client disconnected; kill the process if running
-        try:
-            if proc and proc.poll() is None:
-                proc.kill()
-        except Exception as e:
-            logging.exception("Failed to kill process after disconnect: %s", e)
+        ap_rows = rows[1:sep_idx] if sep_idx else rows[1:]
+        client_rows = rows[sep_idx+2:] if sep_idx and (sep_idx + 2) < len(rows) else []
+
+        for row in ap_rows:
+            if len(row) < 9:
+                continue
+            bssid = row[0].strip()
+            channel = row[3].strip() if len(row) > 3 else ""
+            privacy = row[5].strip() if len(row) > 5 else ""
+            power_str = row[8].strip() if len(row) > 8 else ""
+            try:
+                power = int(power_str)
+            except:
+                power = -100
+            essid = row[13].strip() if len(row) > 13 else ""
+            
+            if power > -90:
+                aps.append({
+                    "bssid": bssid,
+                    "essid": essid if essid else "Oculto",
+                    "power": power,
+                    "channel": channel,
+                    "privacy": privacy,
+                    "clients": []
+                })
+
+        for row in client_rows:
+            if len(row) < 6:
+                continue
+            client_mac = row[0].strip()
+            power_str = row[3].strip() if len(row) > 3 else ""
+            try:
+                power = int(power_str)
+            except:
+                power = -100
+            ap_bssid = row[5].strip() if len(row) > 5 else ""
+            
+            for ap in aps:
+                if ap["bssid"] == ap_bssid:
+                    ap["clients"].append({"mac": client_mac, "power": power})
+                    break
+        
+        aps.sort(key=lambda x: x["power"], reverse=True)
+        for ap in aps:
+            ap["clients"].sort(key=lambda x: x["power"], reverse=True)
+            
     except Exception as e:
-        logging.exception("ws_attack error")
+        print("[parser] Error parsing CSV:", e)
+    
+    return aps
+
+# ---------------- Scanner Loop ----------------
+def scanner_loop():
+    print("[scanner] Iniciando loop de escaneo...")
+    message_count = 0
+    last_data = None
+    
+    while scanner_running:
         try:
-            await websocket.send_json({"error": str(e)})
-            await websocket.close()
+            csv_path = find_csv()
+            if csv_path:
+                aps = parse_airodump_csv(csv_path)
+                total_clients = sum(len(ap["clients"]) for ap in aps)
+                
+                current_data = json.dumps(aps, sort_keys=True)
+                if current_data != last_data or message_count % 10 == 0:
+                    payload = {
+                        "aps": aps,
+                        "timestamp": time.time(),
+                        "total_networks": len(aps),
+                        "total_clients": total_clients,
+                        "message_id": message_count,
+                        "status": "success"
+                    }
+                    
+                    socketio.emit('wifi_data', payload)
+                    message_count += 1
+                    last_data = current_data
+                    
+                    if message_count % 10 == 1:
+                        print(f"[scanner] Enviados {len(aps)} APs a {clients_count} clientes")
+            
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"[scanner] Error: {e}")
+            time.sleep(5)
+
+# ---------------- SocketIO Events CORREGIDOS ----------------
+@socketio.on('connect')
+def handle_connect():
+    """Manejador de conexión corregido"""
+    global clients_count
+    clients_count += 1
+    print(f"[ws] ✅ Cliente conectado. Total: {clients_count}")
+    emit('status', {'message': 'Conectado al escáner WiFi', 'clients': clients_count})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Manejador de desconexión"""
+    global clients_count
+    clients_count = max(0, clients_count - 1)
+    print(f"[ws] 🔌 Cliente desconectado. Total: {clients_count}")
+
+@socketio.on('request_data')
+def handle_request_data():
+    """Enviar datos inmediatamente"""
+    csv_path = find_csv()
+    if csv_path:
+        aps = parse_airodump_csv(csv_path)
+        total_clients = sum(len(ap["clients"]) for ap in aps)
+        
+        payload = {
+            "aps": aps,
+            "timestamp": time.time(),
+            "total_networks": len(aps),
+            "total_clients": total_clients,
+            "status": "success"
+        }
+        emit('wifi_data', payload)
+
+# ---------------- HTTP Routes ----------------
+@app.route('/')
+def index():
+    return jsonify({
+        "status": "Black Swan WiFi Recon API", 
+        "websocket": True,
+        "clients_connected": clients_count,
+        "timestamp": time.time()
+    })
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy", "timestamp": time.time()})
+
+@app.route('/scan')
+def immediate_scan():
+    csv_path = find_csv()
+    if csv_path:
+        aps = parse_airodump_csv(csv_path)
+        return jsonify({
+            "aps": aps,
+            "timestamp": time.time(),
+            "total_networks": len(aps),
+            "total_clients": sum(len(ap["clients"]) for ap in aps)
+        })
+    return jsonify({"error": "No CSV file found"})
+
+# ---------------- Cleanup ----------------
+def cleanup():
+    print("\n🛑 Limpiando...")
+    global scanner_running
+    scanner_running = False
+    
+    if proc and proc.poll() is None:
+        print("🔪 Terminando airodump-ng...")
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    
+    for p in Path("/tmp").glob("airodump_capture*"):
+        try:
+            p.unlink()
         except Exception:
             pass
-        # ensure child killed
-        try:
-            if proc and proc.poll() is None:
-                proc.kill()
-        except Exception:
-            pass
+
+def signal_handler(sig, frame):
+    print(f"\n📡 Recibida señal {sig}")
+    cleanup()
+    sys.exit(0)
+
+# ---------------- Main ----------------
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        print("❌ Ejecuta con: sudo python3 main.py")
+        sys.exit(1)
+    
+    try:
+        subprocess.run(["airodump-ng", "--help"], capture_output=True, timeout=2)
+        print("✅ airodump-ng encontrado")
+    except:
+        print("❌ airodump-ng no encontrado")
+        sys.exit(1)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    print("🚀 Iniciando Black Swan - WiFi Reconnaissance System")
+    print(f"📡 Interface: {INTERFACE}")
+    print(f"🌐 Puerto: {PORT}")
+    print("=" * 50)
+    
+    try:
+        print("🎯 Iniciando airodump-ng...")
+        proc = start_airodump_csv()
+        time.sleep(5)
+        
+        csv_file = find_csv()
+        if csv_file:
+            print(f"📄 Archivo CSV detectado: {csv_file}")
+            test_aps = parse_airodump_csv(csv_file)
+            print(f"🔍 Test parsing: {len(test_aps)} APs encontrados")
+        
+        scanner_thread = threading.Thread(target=scanner_loop, daemon=True)
+        scanner_thread.start()
+        
+        print("✅ Sistema iniciado correctamente!")
+        print(f"🔗 WebSocket disponible en: http://0.0.0.0:{PORT}")
+        print("👂 Esperando conexiones...")
+        print("-" * 50)
+        
+        socketio.run(app, host='0.0.0.0', port=PORT, debug=False, allow_unsafe_werkzeug=True)
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Interrupción por teclado")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        traceback.print_exc()
+    finally:
+        cleanup()
+        print("👋 Sistema terminado")
