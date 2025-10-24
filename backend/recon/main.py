@@ -163,7 +163,7 @@ def scanner_loop():
                     if message_count % 10 == 1:
                         print(f"[scanner] Enviados {len(aps)} APs a {clients_count} clientes")
             
-            time.sleep(2)
+            time.sleep(10)
             
         except Exception as e:
             print(f"[scanner] Error: {e}")
