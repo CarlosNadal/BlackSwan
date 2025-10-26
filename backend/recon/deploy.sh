@@ -30,7 +30,7 @@ fi
 if ! command -v python3 &> /dev/null; then
     echo "❌ python3 no encontrado"
     echo "💡 Instalando python3..."
-    apt install -y python3 python3-venv
+    apt install -y python3 python3-venv python3-pip
 else
     echo "✅ python3 encontrado"
 fi
@@ -49,21 +49,21 @@ fi
 # Activar entorno virtual
 source venv/bin/activate
 
-# Instalar/actualizar dependencias Python
-echo "📥 Instalando dependencias Python..."
-pip install --upgrade pip
-pip install flask flask-socketio flask-cors
-
-echo "✅ Dependencias Python instaladas"
-
-# Paso 3: Crear servicio systemd
+# Paso 3: Instalar/actualizar dependencias Python
 echo ""
-echo "⚙️ Paso 3: Configurando servicio systemd..."
+echo "📥 Instalando dependencias Python..."
+pip install --upgrade pip setuptools wheel greenlet
+pip install flask flask-socketio flask-cors eventlet
+
+echo "✅ Dependencias Python instaladas correctamente"
+
+# Paso 4: Crear servicio systemd
+echo ""
+echo "⚙️ Paso 4: Configurando servicio systemd..."
 
 SERVICE_FILE="/etc/systemd/system/blackswan-wifi.service"
 CURRENT_DIR=$(pwd)
 
-# Crear el archivo de servicio
 cat > /tmp/blackswan-wifi.service << EOF
 [Unit]
 Description=Black Swan WiFi Reconnaissance
@@ -91,40 +91,44 @@ ReadWritePaths=$CURRENT_DIR /tmp
 WantedBy=multi-user.target
 EOF
 
-# Mover el archivo a su ubicación final
 mv /tmp/blackswan-wifi.service $SERVICE_FILE
 chmod 644 $SERVICE_FILE
 
 echo "✅ Servicio creado: $SERVICE_FILE"
 
-# Paso 4: Configurar permisos y recargar systemd
+# Paso 5: Configurar permisos y recargar systemd
 echo ""
-echo "🔐 Paso 4: Configurando permisos..."
-sudo systemctl daemon-reload
+echo "🔐 Paso 5: Configurando permisos..."
+systemctl daemon-reload
 echo "✅ Systemd recargado"
 
-# Paso 5: Probar que el código funciona
+# Paso 6: Verificar dependencias antes de iniciar
 echo ""
-echo "🧪 Paso 5: Probando instalación..."
-if ! source venv/bin/activate && python3 -c "import flask, flask_socketio, flask_cors, eventlet; print('✅ Importaciones OK')"; then
-    echo "❌ Error en las dependencias Python"
+echo "🧪 Paso 6: Verificando importaciones..."
+if ! python3 - << 'EOF'
+try:
+    import flask, flask_socketio, flask_cors, eventlet
+    print("✅ Importaciones OK")
+except Exception as e:
+    print("❌ Error:", e)
+    exit(1)
+EOF
+then
+    echo "❌ Error en dependencias Python"
     exit 1
 fi
 
-# Paso 6: Iniciar y habilitar el servicio
+# Paso 7: Iniciar y habilitar el servicio
 echo ""
-echo "⚡ Paso 6: Iniciando servicio..."
-sudo systemctl enable blackswan-wifi
-echo "✅ Servicio habilitado (inicio automático)"
+echo "⚡ Paso 7: Iniciando servicio..."
+systemctl enable blackswan-wifi
+systemctl restart blackswan-wifi
+sleep 3
 
-sudo systemctl start blackswan-wifi
-echo "✅ Servicio iniciado"
-
-# Esperar un poco y verificar estado
-sleep 2
+# Paso 8: Verificar estado del servicio
 echo ""
 echo "📊 Verificando estado del servicio..."
-SERVICE_STATUS=$(sudo systemctl is-active blackswan-wifi)
+SERVICE_STATUS=$(systemctl is-active blackswan-wifi)
 
 if [ "$SERVICE_STATUS" = "active" ]; then
     echo "✅ Servicio ejecutándose correctamente"
@@ -150,7 +154,7 @@ echo "🌐 URLs de acceso:"
 echo "   WebSocket: http://$(hostname -I | awk '{print $1}'):8000"
 echo "   HTTP API:  http://$(hostname -I | awk '{print $1}'):8000/scan"
 echo ""
-echo "📝 Logs del servicio:"
-sudo journalctl -u blackswan-wifi -n 5 --no-pager
+echo "📝 Últimos logs del servicio:"
+journalctl -u blackswan-wifi -n 5 --no-pager
 echo ""
 echo "💡 Para más logs: sudo journalctl -u blackswan-wifi -f"

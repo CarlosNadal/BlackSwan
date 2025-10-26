@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import * as d3 from "d3";
 import "./App.css";
+import AccessPointModal from "/src/components/AccessPointModal";
+import TrafficBar from "/src/components/TrafficBar";
 
 function App() {
   const svgRef = useRef();
@@ -19,6 +21,8 @@ function App() {
   });
   const socketRef = useRef(null);
   const simulationRef = useRef(null);
+  const alertNodesRef = useRef(new Set());
+  const fixedNodesRef = useRef(new Set()); // Para trackear nodos fijados
 
   // Colores según potencia
   const getPowerColor = (power) => {
@@ -40,7 +44,41 @@ function App() {
     setSelectedNode(null);
   };
 
-  // 📡 Socket.IO Connection
+  // Función para animar alertas
+  const animateAlerts = (alertBssids) => {
+    const svg = d3.select(svgRef.current);
+    
+    // Detener todas las animaciones previas
+    svg.selectAll(".node.alert").classed("alert", false);
+    
+    // Aplicar animación a nodos con alertas
+    alertBssids.forEach(bssid => {
+      const node = svg.select(`circle.node[data-id="${bssid}"]`);
+      if (!node.empty()) {
+        node.classed("alert", true);
+        
+        // Animación manual de parpadeo
+        const blink = () => {
+          node
+            .transition().duration(500)
+            .style("fill", "#ff4444")
+            .style("filter", "drop-shadow(0 0 15px rgba(255, 68, 68, 0.9))")
+            .transition().duration(500)
+            .style("fill", d => getPowerColor(d.data.power || -80))
+            .style("filter", "drop-shadow(0 0 6px rgba(255,235,59,0.6))")
+            .on("end", function() {
+              if (node.classed("alert")) {
+                blink();
+              }
+            });
+        };
+        
+        blink();
+      }
+    });
+  };
+
+  // ---------------- SOCKET.IO ----------------
   useEffect(() => {
     const connectSocket = () => {
       const socketUrl = "http://localhost:8000";
@@ -60,6 +98,11 @@ function App() {
         });
 
         socket.on("wifi_data", (newData) => {
+          console.log("📡 wifi_data recibido:");
+          console.log("🔹 APs:", newData.aps?.length || 0);
+          console.log("🔹 Clientes:", newData.total_clients || 0);
+          console.log("🔹 Alertas:", newData.alerts?.length || 0);
+
           setData(newData);
           setConnectionStats((prev) => ({
             messages: prev.messages + 1,
@@ -68,6 +111,24 @@ function App() {
             connectedClients: prev.connectedClients,
             lastUpdate: new Date().toLocaleTimeString(),
           }));
+
+          // Procesar alertas después de actualizar el estado
+          if (newData.alerts && newData.alerts.length > 0) {
+            const alertBssids = newData.alerts
+              .filter(alert => alert.bssid)
+              .map(alert => alert.bssid);
+            
+            console.log("🚨 BSSIDs con alertas:", alertBssids);
+            
+            // Pequeño delay para asegurar que los nodos estén renderizados
+            setTimeout(() => {
+              animateAlerts(alertBssids);
+            }, 500);
+          } else {
+            // Si no hay alertas, detener animaciones
+            const svg = d3.select(svgRef.current);
+            svg.selectAll(".node.alert").classed("alert", false);
+          }
         });
 
         socket.on("status", (status) => {
@@ -103,7 +164,7 @@ function App() {
     };
   }, []);
 
-  // 🎯 Visualización D3 CON RADAR AMARILLO Y PULSO
+  // ---------------- D3 ----------------
   useEffect(() => {
     if (!data || !data.aps) return;
 
@@ -114,11 +175,11 @@ function App() {
     const centerY = height / 2;
 
     svg.attr("width", width).attr("height", height);
-    svg.selectAll(".data-group").remove();
 
-    const dataGroup = svg.append("g").attr("class", "data-group");
+    // Limpiar solo elementos de datos
+    svg.select(".data-group").remove();
 
-    // Guías tipo radar AMARILLAS con efecto de pulso
+    // ---------------- RADAR Y PULSO ----------------
     if (!svg.select(".guide-circles").node()) {
       const guideGroup = svg.append("g").attr("class", "guide-circles");
       const radii = [
@@ -127,120 +188,84 @@ function App() {
         Math.min(width, height) * 0.35,
       ];
 
-      // Círculos concéntricos amarillos
       radii.forEach((r, i) => {
         const circle = guideGroup.append("circle")
           .attr("cx", centerX)
           .attr("cy", centerY)
           .attr("r", r)
           .attr("fill", "none")
-          .attr("stroke", i === 0 ? "#ffeb3b" : i === 1 ? "#ffd740" : "#ffc107") // Amarillos en diferentes tonos
+          .attr("stroke", i === 0 ? "#ffeb3b" : i === 1 ? "#ffd740" : "#ffc107")
           .attr("stroke-width", 1.5)
           .attr("stroke-dasharray", "4,4")
           .attr("opacity", 0.6);
 
-        // Efecto de pulso para cada círculo
         const pulseCircle = () => {
-          circle
-            .transition()
-            .duration(2000)
-            .ease(d3.easeSinInOut)
-            .attr("stroke-width", 3)
-            .attr("opacity", 0.9)
-            .transition()
-            .duration(2000)
-            .ease(d3.easeSinInOut)
-            .attr("stroke-width", 1.5)
-            .attr("opacity", 0.6)
+          circle.transition()
+            .duration(2000).ease(d3.easeSinInOut)
+            .attr("stroke-width", 3).attr("opacity", 0.9)
+            .transition().duration(2000).ease(d3.easeSinInOut)
+            .attr("stroke-width", 1.5).attr("opacity", 0.6)
             .on("end", pulseCircle);
         };
-        
-        // Iniciar pulsos con delay escalonado
         setTimeout(pulseCircle, i * 800);
       });
 
-      // Líneas radiales amarillas
-      const lines = 8; // Más líneas para mejor efecto radar
+      // Líneas radiales
+      const lines = 8;
       for (let i = 0; i < lines; i++) {
         const angle = (i / lines) * 2 * Math.PI;
         const x2 = centerX + Math.cos(angle) * radii[2];
         const y2 = centerY + Math.sin(angle) * radii[2];
-        
         const line = guideGroup.append("line")
-          .attr("x1", centerX)
-          .attr("y1", centerY)
-          .attr("x2", x2)
-          .attr("y2", y2)
-          .attr("stroke", "#ffeb3b")
-          .attr("stroke-width", 1)
+          .attr("x1", centerX).attr("y1", centerY)
+          .attr("x2", x2).attr("y2", y2)
+          .attr("stroke", "#ffeb3b").attr("stroke-width", 1)
           .attr("opacity", 0.4);
 
-        // Efecto de pulso para líneas
         const pulseLine = () => {
-          line
-            .transition()
-            .duration(1500)
-            .ease(d3.easeSinInOut)
-            .attr("stroke-width", 2)
-            .attr("opacity", 0.8)
-            .attr("x2", centerX + Math.cos(angle) * (radii[2] * 1.05)) // Leve expansión
-            .attr("y2", centerY + Math.sin(angle) * (radii[2] * 1.05))
-            .transition()
-            .duration(1500)
-            .ease(d3.easeSinInOut)
-            .attr("stroke-width", 1)
-            .attr("opacity", 0.4)
-            .attr("x2", x2)
-            .attr("y2", y2)
+          line.transition()
+            .duration(1500).ease(d3.easeSinInOut)
+            .attr("stroke-width", 2).attr("opacity", 0.8)
+            .attr("x2", centerX + Math.cos(angle) * (radii[2]*1.05))
+            .attr("y2", centerY + Math.sin(angle) * (radii[2]*1.05))
+            .transition().duration(1500).ease(d3.easeSinInOut)
+            .attr("stroke-width", 1).attr("opacity", 0.4)
+            .attr("x2", x2).attr("y2", y2)
             .on("end", pulseLine);
         };
-        
-        setTimeout(pulseLine, i * 300);
+        setTimeout(pulseLine, i*300);
       }
 
-      // Círculo central de escaneo (efecto radar pulsante)
       const scanCircle = guideGroup.append("circle")
-        .attr("cx", centerX)
-        .attr("cy", centerY)
+        .attr("cx", centerX).attr("cy", centerY)
         .attr("r", 5)
         .attr("fill", "#ffeb3b")
         .attr("opacity", 0.8);
 
       const pulseScan = () => {
-        scanCircle
-          .transition()
-          .duration(1000)
-          .ease(d3.easeSinInOut)
-          .attr("r", 8)
-          .attr("opacity", 1)
-          .transition()
-          .duration(1000)
-          .ease(d3.easeSinInOut)
-          .attr("r", 5)
-          .attr("opacity", 0.8)
+        scanCircle.transition()
+          .duration(1000).ease(d3.easeSinInOut)
+          .attr("r", 8).attr("opacity", 1)
+          .transition().duration(1000).ease(d3.easeSinInOut)
+          .attr("r", 5).attr("opacity", 0.8)
           .on("end", pulseScan);
       };
       pulseScan();
     }
 
-    // 🔹 Construcción de nodos CON POSICIONES INICIALES
+    // ---------------- NODOS Y LINKS ----------------
     const nodes = [];
     const links = [];
 
     data.aps.forEach((ap, index) => {
-      // Posicionar APs en círculos concéntricos según potencia
       let radius;
-      if (ap.power >= -50) {
-        radius = Math.min(width, height) * 0.15;
-      } else if (ap.power >= -70) {
-        radius = Math.min(width, height) * 0.25;
-      } else {
-        radius = Math.min(width, height) * 0.35;
-      }
+      if (ap.power >= -50) radius = Math.min(width, height)*0.15;
+      else if (ap.power >= -70) radius = Math.min(width, height)*0.25;
+      else radius = Math.min(width, height)*0.35;
 
       const angle = (index / data.aps.length) * 2 * Math.PI;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
+      const x = centerX + Math.cos(angle)*radius;
+      const y = centerY + Math.sin(angle)*radius;
 
       const apNode = {
         id: ap.bssid,
@@ -251,18 +276,14 @@ function App() {
         y: y,
         radius: radius
       };
-
       nodes.push(apNode);
 
-      // Agregar clientes
-      if (ap.clients) {
-        ap.clients.forEach((client, clientIndex) => {
-          // Posicionar clientes alrededor del AP
-          const clientAngle = (clientIndex / ap.clients.length) * 2 * Math.PI;
-          const clientDistance = 60 + Math.random() * 40;
-          const clientX = x + Math.cos(clientAngle) * clientDistance;
-          const clientY = y + Math.sin(clientAngle) * clientDistance;
-
+      if(ap.clients){
+        ap.clients.forEach((client, cIndex)=>{
+          const clientAngle = (cIndex/ap.clients.length)*2*Math.PI;
+          const clientDistance = 60 + Math.random()*40;
+          const clientX = x + Math.cos(clientAngle)*clientDistance;
+          const clientY = y + Math.sin(clientAngle)*clientDistance;
           const clientNode = {
             id: client.mac,
             label: client.mac,
@@ -272,156 +293,132 @@ function App() {
             x: clientX,
             y: clientY
           };
-
           nodes.push(clientNode);
-          links.push({ source: ap.bssid, target: client.mac });
+          links.push({source: ap.bssid, target: client.mac});
         });
       }
     });
 
-    // Links
-    const linkSel = dataGroup.selectAll("line.link")
-      .data(links)
-      .join("line")
-      .attr("class", "link")
-      .attr("stroke", "#ffeb3b") // Amarillo para links también
-      .attr("stroke-opacity", 0.3)
-      .attr("stroke-dasharray", "3,3")
-      .attr("stroke-width", 1.2);
+    const dataGroup = svg.append("g").attr("class","data-group");
 
-    // Nodos
-    const nodeSel = dataGroup.selectAll("circle.node")
-      .data(nodes, (d) => d.id)
+    // LINKS
+    const linkSel = dataGroup.selectAll("line.link").data(links, d => d.source+"-"+d.target)
+      .join("line")
+      .attr("class","link")
+      .attr("stroke","#ffeb3b").attr("stroke-opacity",0.3)
+      .attr("stroke-dasharray","3,3").attr("stroke-width",1.2);
+
+    // NODOS
+    const nodeSel = dataGroup.selectAll("circle.node").data(nodes, d => d.id)
       .join("circle")
-      .attr("class", "node")
-      .attr("r", (d) => (d.type === "ap" ? 16 : 8))
-      .attr("cx", (d) => d.x)
-      .attr("cy", (d) => d.y)
-      .attr("fill", (d) => getPowerColor(d.data.power || -80))
-      .attr("stroke", (d) => (d.type === "ap" ? "#ffeb3b" : "#ffd740")) // Bordes amarillos
-      .attr("stroke-width", (d) => (d.type === "ap" ? 2.5 : 1.5))
-      .style("cursor", "pointer")
+      .attr("class","node")
+      .attr("data-id", d => d.id)
+      .attr("r", d => d.type === "ap" ? 16 : 8)
+      .attr("cx", d => d.x).attr("cy", d => d.y)
+      .attr("fill", d => getPowerColor(d.data.power || -80))
+      .attr("stroke", d => (d.type === "ap" ? "#ffeb3b" : "#ffd740"))
+      .attr("stroke-width", d => (d.type === "ap" ? 2.5 : 1.5))
+      .style("cursor","pointer")
       .style("filter", "drop-shadow(0 0 6px rgba(255,235,59,0.6))")
       .on("click", (e, d) => {
-        e.stopPropagation();
-        setSelectedNode(d);
+        e.stopPropagation(); 
+        setSelectedNode(d); 
         setModalOpen(true);
       });
 
-    // Labels
-    const labelSel = dataGroup.selectAll("text.label")
-      .data(nodes, (d) => d.id)
+    const labelSel = dataGroup.selectAll("text.label").data(nodes, d => d.id)
       .join("text")
-      .attr("class", "label")
-      .attr("text-anchor", "middle")
-      .attr("x", (d) => d.x)
-      .attr("y", (d) => d.y - 20)
-      .attr("font-size", "10px")
-      .attr("fill", "#ffeb3b") // Texto amarillo
-      .style("text-shadow", "1px 1px 3px rgba(0,0,0,0.8)")
-      .style("font-weight", "bold")
-      .text((d) => (d.label.length > 10 ? d.label.slice(0, 10) + "…" : d.label));
+      .attr("class","label")
+      .attr("text-anchor","middle")
+      .attr("x", d => d.x).attr("y", d => d.y - 20)
+      .attr("font-size","10px")
+      .attr("fill","#ffeb3b")
+      .style("text-shadow","1px 1px 3px rgba(0,0,0,0.8)")
+      .style("font-weight","bold")
+      .text(d => (d.label.length > 10 ? d.label.slice(0,10) + "…" : d.label));
 
-    // 🔧 COMPORTAMIENTO DE ARRASTRE
+    // DRAG MEJORADO - NODOS SE QUEDAN FIJOS
     const drag = d3.drag()
-      .on("start", function(event, d) {
+      .on("start", (event, d) => {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
-      .on("drag", function(event, d) {
+      .on("drag", (event, d) => {
         d.fx = event.x;
         d.fy = event.y;
       })
-      .on("end", function(event, d) {
+      .on("end", (event, d) => {
         if (!event.active) simulation.alphaTarget(0);
-        // Liberar después de 2 segundos
-        setTimeout(() => {
-          d.fx = null;
-          d.fy = null;
-          simulation.alpha(0.3).restart();
-        }, 2000);
+        
+        // ✅ MARCAR NODO COMO FIJADO PERMANENTEMENTE
+        fixedNodesRef.current.add(d.id);
+        
+        // ✅ MANTENER POSICIÓN FIJA DONDE SE SOLTÓ
+        d.fx = event.x;
+        d.fy = event.y;
       });
 
-    // Aplicar drag a los nodos
     nodeSel.call(drag);
 
-    // Simulación física MEJORADA
-    if (simulationRef.current) simulationRef.current.stop();
-    
+    // DOBLE CLIC PARA LIBERAR NODOS FIJADOS
+    nodeSel.on("dblclick", (event, d) => {
+      event.stopPropagation();
+      d.fx = null;
+      d.fy = null;
+      fixedNodesRef.current.delete(d.id);
+      simulation.alpha(0.3).restart();
+    });
+
+    // SIMULACION
+    if(simulationRef.current) simulationRef.current.stop();
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links)
-        .id((d) => d.id)
-        .distance((d) => {
-          // Distancia más corta para conexiones AP-Cliente
-          const source = nodes.find(n => n.id === d.source);
-          const target = nodes.find(n => n.id === d.target);
-          if (source && target && source.type === "ap" && target.type === "client") {
-            return 60;
-          }
-          return 100;
-        })
-        .strength(0.1)
-      )
-      .force("charge", d3.forceManyBody()
-        .strength((d) => (d.type === "ap" ? -80 : -40))
-      )
+      .force("link", d3.forceLink(links).id(d => d.id).distance(d => {
+        const s = nodes.find(n => n.id === d.source);
+        const t = nodes.find(n => n.id === d.target);
+        if(s && t && s.type === "ap" && t.type === "client") return 60;
+        return 100;
+      }).strength(0.1))
+      .force("charge", d3.forceManyBody().strength(d => (d.type === "ap" ? -80 : -40)))
       .force("center", d3.forceCenter(centerX, centerY).strength(0.05))
-      .force("collision", d3.forceCollide()
-        .radius((d) => (d.type === "ap" ? 20 : 12))
-        .strength(0.7)
-      )
-      .force("radial", d3.forceRadial()
-        .radius((d) => d.radius || Math.min(width, height) * 0.35)
-        .x(centerX)
-        .y(centerY)
-        .strength((d) => d.type === "ap" ? 0.1 : 0.02)
-      )
+      .force("collision", d3.forceCollide().radius(d => (d.type === "ap" ? 20 : 12)).strength(0.7))
+      .force("radial", d3.forceRadial().radius(d => d.radius || Math.min(width, height) * 0.35).x(centerX).y(centerY).strength(d => (d.type === "ap" ? 0.1 : 0.02)))
       .alphaDecay(0.02)
       .velocityDecay(0.4)
       .on("tick", () => {
-        linkSel
-          .attr("x1", (d) => d.source.x)
-          .attr("y1", (d) => d.source.y)
-          .attr("x2", (d) => d.target.x)
-          .attr("y2", (d) => d.target.y);
-        
-        nodeSel
-          .attr("cx", (d) => d.x)
-          .attr("cy", (d) => d.y);
-        
-        labelSel
-          .attr("x", (d) => d.x)
-          .attr("y", (d) => d.y - 20);
+        linkSel.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+        nodeSel.attr("cx", d => d.x).attr("cy", d => d.y);
+        labelSel.attr("x", d => d.x).attr("y", d => d.y - 20);
       });
 
     simulationRef.current = simulation;
 
-    // Click en el SVG para liberar todos los nodos
-    svg.on("click", () => {
-      nodes.forEach(node => {
-        node.fx = null;
-        node.fy = null;
-      });
-      simulation.alpha(0.3).restart();
+    // Click SVG para liberar solo nodos NO FIJADOS
+    svg.on("click", (event) => {
+      // Solo liberar si se hace click en fondo (no en un nodo)
+      if (event.target === svg.node()) {
+        nodes.forEach(n => {
+          // ✅ SOLO LIBERAR NODOS NO FIJADOS MANUALMENTE
+          if (!fixedNodesRef.current.has(n.id)) {
+            n.fx = null;
+            n.fy = null;
+          }
+        });
+        simulation.alpha(0.3).restart();
+      }
     });
 
-    // Manejar redimensionamiento
+    // RESIZE
     const handleResize = () => {
-      if (data && data.aps) {
-        simulation.stop();
-        setData({...data});
-      }
+      svg.attr("width", window.innerWidth).attr("height", window.innerHeight);
     };
-
     window.addEventListener("resize", handleResize);
 
     return () => {
       window.removeEventListener("resize", handleResize);
-      if (simulationRef.current) {
-        simulationRef.current.stop();
-      }
+      if(simulationRef.current) simulationRef.current.stop();
     };
+
   }, [data]);
 
   return (
@@ -429,123 +426,78 @@ function App() {
       <header className="app-header">
         <h1>Black Swan — WiFi Recon</h1>
         <p>Visualización de redes y dispositivos conectados</p>
+        
+        {data && data.total_traffic !== undefined && (
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            gap: '10px',
+            marginTop: '10px'
+          }}>
+            <span style={{ color: '#ffeb3b', fontWeight: 'bold' }}>Tráfico Global:</span>
+            <TrafficBar packetCount={data.total_traffic} />
+          </div>
+        )}
+
+        {data && data.alerts && data.alerts.length > 0 && (
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            gap: '10px',
+            marginTop: '5px'
+          }}>
+            <span style={{ 
+              color: '#ff4444', 
+              fontWeight: 'bold',
+              textShadow: '0 0 8px rgba(255, 68, 68, 0.8)',
+              animation: 'pulse 1s infinite'
+            }}>
+              ⚠️ {data.alerts.length} ALERTA(S) ACTIVA(S) - NODOS EN ROJO PARPADEANTE
+            </span>
+          </div>
+        )}
       </header>
 
       <svg ref={svgRef} className="fullscreen-svg"></svg>
 
-      {/* Estado de conexión MEJORADO */}
       <div className={`connection-status ${connectionStatus.toLowerCase()}`}>
         <div className="status-indicator"></div>
         <span>Estado: {connectionStatus}</span>
-        {connectionStats.lastUpdate && (
-          <span> • Última actualización: {connectionStats.lastUpdate}</span>
-        )}
-        {connectionStats.networks > 0 && (
-          <span> • Redes: {connectionStats.networks}</span>
-        )}
-        {connectionStats.clients > 0 && (
-          <span> • Clientes: {connectionStats.clients}</span>
+        {connectionStats.lastUpdate && (<span> • Última actualización: {connectionStats.lastUpdate}</span>)}
+        {connectionStats.networks > 0 && (<span> • Redes: {connectionStats.networks}</span>)}
+        {connectionStats.clients > 0 && (<span> • Clientes: {connectionStats.clients}</span>)}
+        {data && data.alerts && data.alerts.length > 0 && (
+          <span style={{color: '#ff4444', fontWeight: 'bold'}}> • Alertas: {data.alerts.length}</span>
         )}
       </div>
 
-      {/* Instrucciones de uso */}
       <div className="usage-hint">
-        💡 Haz click y arrastra los nodos • Click en el fondo para liberarlos
+        ❗ Click y arrastra nodos para dejarlos fijos<br/>
+        🔄 Escaneo: Responde inmediatamente a cambios, <br/>actualización periódico cada 3 minutos
+
       </div>
 
-      {/* Leyenda ACTUALIZADA con colores amarillos */}
       {showLegend && (
         <div className="legend-panel">
           <h3>Leyenda de señal</h3>
-          <div className="legend-item">
-            <span className="color-dot" style={{ backgroundColor: "#00ff88" }}></span>
-            Excelente (-30 dBm)
-          </div>
-          <div className="legend-item">
-            <span className="color-dot" style={{ backgroundColor: "#00cc66" }}></span>
-            Buena (-50 dBm)
-          </div>
-          <div className="legend-item">
-            <span className="color-dot" style={{ backgroundColor: "#ffaa00" }}></span>
-            Regular (-70 dBm)
-          </div>
-          <div className="legend-item">
-            <span className="color-dot" style={{ backgroundColor: "#ff4444" }}></span>
-            {"Débil (< -70 dBm)"}
-          </div>
-          <div className="legend-item">
-            <span className="device-type ap" style={{ background: "#ffeb3b" }}>📡</span>
-            Punto de Acceso
-          </div>
-          <div className="legend-item">
-            <span className="device-type client" style={{ background: "#ffd740" }}>📱</span>
-            Dispositivo Cliente
-          </div>
-          <button onClick={() => setShowLegend(false)}>Minimizar</button>
+          <div className="legend-item"><span className="color-dot" style={{backgroundColor:"#00ff88"}}></span>Excelente (-30 dBm)</div>
+          <div className="legend-item"><span className="color-dot" style={{backgroundColor:"#00cc66"}}></span>Buena (-50 dBm)</div>
+          <div className="legend-item"><span className="color-dot" style={{backgroundColor:"#ffaa00"}}></span>Regular (-70 dBm)</div>
+          <div className="legend-item"><span className="color-dot" style={{backgroundColor:"#ff4444"}}></span>{"Débil (< -70 dBm)"}</div>
+          <div className="legend-item"><span className="color-dot" style={{backgroundColor:"#ff4444", animation: "pulse 1s infinite"}}></span>Alerta activa (parpadeante)</div>
+          <button onClick={()=>setShowLegend(false)}>Minimizar</button>
         </div>
       )}
 
-      {!showLegend && (
-        <button className="legend-show-btn" onClick={() => setShowLegend(true)}>
-          📊 Mostrar leyenda
-        </button>
-      )}
+      {!showLegend && (<button className="legend-show-btn" onClick={()=>setShowLegend(true)}>📊 Mostrar leyenda</button>)}
 
-      {/* Modal de información MEJORADO */}
       {modalOpen && selectedNode && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{selectedNode.type === "ap" ? "📡 Punto de Acceso" : "📱 Dispositivo Cliente"}</h2>
-              <button onClick={closeModal}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="info-section">
-                <p><strong>ID:</strong> {selectedNode.id}</p>
-                {selectedNode.data.essid && (
-                  <p><strong>ESSID:</strong> {selectedNode.data.essid}</p>
-                )}
-                <p>
-                  <strong>Potencia:</strong> 
-                  <span style={{ 
-                    color: getPowerColor(selectedNode.data.power),
-                    fontWeight: 'bold',
-                    marginLeft: '8px'
-                  }}>
-                    {selectedNode.data.power} dBm ({getPowerLevel(selectedNode.data.power)})
-                  </span>
-                </p>
-                {selectedNode.data.channel && (
-                  <p><strong>Canal:</strong> {selectedNode.data.channel}</p>
-                )}
-                {selectedNode.data.privacy && (
-                  <p><strong>Seguridad:</strong> {selectedNode.data.privacy}</p>
-                )}
-              </div>
-              
-              {selectedNode.type === "ap" && selectedNode.data.clients && (
-                <div className="clients-section">
-                  <h4>Dispositivos conectados ({selectedNode.data.clients.length})</h4>
-                  <div className="clients-list">
-                    {selectedNode.data.clients.map((client, index) => (
-                      <div key={index} className="client-item">
-                        <span className="client-mac">{client.mac}</span>
-                        <span className="client-power" style={{ 
-                          color: getPowerColor(client.power)
-                        }}>
-                          {client.power} dBm
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button onClick={closeModal}>Cerrar</button>
-            </div>
-          </div>
-        </div>
+        <AccessPointModal 
+          selectedNode={selectedNode} 
+          onClose={closeModal} 
+        />
       )}
     </div>
   );

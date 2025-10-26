@@ -20,7 +20,7 @@ body {
   background: #000;
 }
 
-/* Fondo con marca de agua - Logo Black Swan */
+/* Fondo con marca de agua */
 .App::after {
   content: "";
   position: fixed;
@@ -32,7 +32,7 @@ body {
   background-size: 300px 300px;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.8;
+  opacity: 0.5;
   z-index: 0;
   pointer-events: none;
   animation: float 25s ease-in-out infinite;
@@ -50,7 +50,7 @@ body {
   }
 }
 
-/* Header*/
+/* Header */
 .app-header {
   position: fixed;
   top: 0;
@@ -94,7 +94,6 @@ body {
   background: transparent;
   z-index: 1;
 }
-
 
 /* Modal Styles */
 .modal-overlay {
@@ -226,6 +225,57 @@ body {
   border: 1px solid #333;
 }
 
+/* Lista de clientes en modal */
+.clients-list {
+  margin-top: 1rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.client-item {
+  background: rgba(255, 235, 59, 0.05);
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 0.8rem;
+  transition: all 0.3s ease;
+  border-left: 3px solid #00ff88;
+}
+
+.client-item:hover {
+  background: rgba(255, 235, 59, 0.1);
+  border-color: #ffeb3b;
+}
+
+.client-mac {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #ffeb3b;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.client-power {
+  font-size: 0.85rem;
+  color: #ffd54f;
+}
+
+.client-info {
+  font-size: 12px;
+  color: #ccc;
+  margin-top: 4px;
+}
+
+.no-clients {
+  text-align: center;
+  color: #ff9800;
+  font-style: italic;
+  padding: 1rem;
+  background: rgba(255, 152, 0, 0.1);
+  border-radius: 6px;
+  border: 1px dashed #ff9800;
+}
+
 .modal-footer {
   padding: 1.5rem 2rem 2rem 2rem;
   display: flex;
@@ -258,129 +308,7 @@ body {
   transform: translateY(0);
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .app-header {
-    padding: 0.6rem 1rem;
-    height: 60px;
-  }
-  
-  .app-header h1 {
-    font-size: 1.2rem;
-  }
-  
-  .app-header p {
-    font-size: 0.75rem;
-  }
-  
-  .info-grid {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-  
-  .modal-content {
-    margin: 1rem;
-    max-height: 80vh;
-  }
-  
-  .modal-header,
-  .modal-body {
-    padding: 1.5rem;
-  }
-  
-  .App::after {
-    background-size: 200px 200px;
-  }
-}
-
-@media (max-width: 480px) {
-  .app-header h1 {
-    font-size: 1.1rem;
-  }
-  
-  .app-header p {
-    font-size: 0.7rem;
-  }
-  
-  .modal-header h2 {
-    font-size: 1.4rem;
-  }
-  
-  .App::after {
-    background-size: 150px 150px;
-  }
-}
-
-/* Scrollbar personalizado */
-.modal-content::-webkit-scrollbar {
-  width: 12px;
-}
-
-.modal-content::-webkit-scrollbar-track {
-  background: rgba(26, 26, 26, 0.8);
-  border-radius: 0 16px 16px 0;
-}
-
-.modal-content::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #ffeb3b, #ffd54f);
-  border-radius: 6px;
-  border: 2px solid rgba(26, 26, 26, 0.8);
-}
-
-.modal-content::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #ffd54f, #ffeb3b);
-}
-
-
-/* Estilos para la lista de clientes en el modal */
-.clients-list {
-  margin-top: 1rem;
-}
-
-.client-item {
-  background: rgba(255, 235, 59, 0.05);
-  border: 1px solid #333;
-  border-radius: 6px;
-  padding: 1rem;
-  margin-bottom: 0.8rem;
-  transition: all 0.3s ease;
-}
-
-.client-item:hover {
-  background: rgba(255, 235, 59, 0.1);
-  border-color: #ffeb3b;
-}
-
-.client-mac {
-  font-family: 'Courier New', monospace;
-  font-weight: bold;
-  color: #ffeb3b;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.client-power {
-  font-size: 0.85rem;
-  color: #ffd54f;
-}
-
-.no-clients {
-  text-align: center;
-  color: #ff9800;
-  font-style: italic;
-  padding: 1rem;
-  background: rgba(255, 152, 0, 0.1);
-  border-radius: 6px;
-  border: 1px dashed #ff9800;
-}
-
-/* Mejoras para los valores de potencia */
-.info-value[style*="color"] {
-  border-left: 4px solid currentColor !important;
-}
-
-
-/* Leyenda flotante */
+/* Leyenda */
 .legend-panel {
   position: fixed;
   top: 80px;
@@ -406,63 +334,10 @@ body {
   }
 }
 
-.legend-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.2rem 1.5rem;
-  border-bottom: 1px solid #333;
-}
-
-.legend-header h3 {
-  color: #ffeb3b;
-  font-size: 1.1rem;
-  margin: 0;
-  text-shadow: 0 0 5px rgba(255, 235, 59, 0.3);
-}
-
-.legend-toggle {
-  background: rgba(255, 235, 59, 0.1);
-  border: 1px solid #ffeb3b;
-  color: #ffeb3b;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  transition: all 0.3s ease;
-}
-
-.legend-toggle:hover {
-  background: #ffeb3b;
-  color: #000;
-}
-
 .legend-content {
   padding: 1.5rem;
   max-height: 60vh;
   overflow-y: auto;
-}
-
-.legend-section {
-  margin-bottom: 1.5rem;
-}
-
-.legend-section:last-child {
-  margin-bottom: 0;
-}
-
-.legend-section h4 {
-  color: #ffd54f;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid #333;
-  padding-bottom: 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .legend-items {
@@ -484,58 +359,6 @@ body {
   border: 2px solid rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
   margin-top: 2px;
-}
-
-.size-dots {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  margin-right: 4px;
-}
-
-.size-dot {
-  border-radius: 50%;
-  border: 2px solid #ffeb3b;
-  background: rgba(255, 235, 59, 0.3);
-}
-
-.size-dot.large {
-  width: 20px;
-  height: 20px;
-}
-
-.size-dot.medium {
-  width: 14px;
-  height: 14px;
-}
-
-.size-dot.small {
-  width: 8px;
-  height: 8px;
-}
-
-.device-type {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.device-type.ap {
-  background: rgba(255, 235, 59, 0.2);
-  border: 1px solid #ffeb3b;
-}
-
-.device-type.client {
-  background: rgba(255, 152, 0, 0.2);
-  border: 1px solid #ff9800;
-}
-
-.device-icon {
-  font-size: 1rem;
 }
 
 .legend-text {
@@ -580,7 +403,7 @@ body {
   color: #000;
 }
 
-/* Botón para mostrar leyenda */
+/* Botón mostrar leyenda */
 .legend-show-btn {
   position: fixed;
   top: 80px;
@@ -606,48 +429,7 @@ body {
   box-shadow: 0 6px 20px rgba(255, 235, 59, 0.3);
 }
 
-/* Scrollbar para la leyenda */
-.legend-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.legend-content::-webkit-scrollbar-track {
-  background: rgba(26, 26, 26, 0.8);
-  border-radius: 3px;
-}
-
-.legend-content::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #ffeb3b, #ffd54f);
-  border-radius: 3px;
-}
-
-.legend-content::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #ffd54f, #ffeb3b);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .legend-panel {
-    width: 280px;
-    right: 10px;
-    top: 70px;
-  }
-  
-  .legend-show-btn {
-    right: 10px;
-    top: 70px;
-    padding: 0.5rem 1rem;
-    font-size: 0.75rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .legend-panel {
-    width: calc(100vw - 40px);
-    right: 20px;
-    left: 20px;
-  }
-}
+/* Status conexión */
 .connection-status {
   position: fixed;
   bottom: 20px;
@@ -663,31 +445,15 @@ body {
   backdrop-filter: blur(10px);
 }
 
-.connection-status.conectado .status-indicator {
-  background: #4caf50;
-  box-shadow: 0 0 8px #4caf50;
-}
-
 .connection-status.desconectado {
   border-left-color: #f44336;
 }
 
 .connection-status.error {
-  background-color: #ff9800;
-  color: white;
+  border-left-color: #ff9800;
 }
 
-.networks-count {
-  margin-left: 8px;
-  opacity: 0.9;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-}
-
-/* Instrucciones de uso */
+/* Instrucciones */
 .usage-hint {
   position: fixed;
   bottom: 80px;
@@ -702,7 +468,7 @@ body {
   backdrop-filter: blur(10px);
 }
 
-/* Mejoras para nodos arrastrables */
+/* Nodos */
 .node {
   cursor: grab;
   transition: all 0.3s ease;
@@ -714,4 +480,82 @@ body {
 
 .data-group {
   pointer-events: all;
+}
+
+/* Animación alertas */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.alert-pulse {
+  animation: pulse 1s infinite;
+}
+
+/* Scrollbars */
+.modal-content::-webkit-scrollbar,
+.legend-content::-webkit-scrollbar {
+  width: 12px;
+}
+
+.modal-content::-webkit-scrollbar-track,
+.legend-content::-webkit-scrollbar-track {
+  background: rgba(26, 26, 26, 0.8);
+  border-radius: 6px;
+}
+
+.modal-content::-webkit-scrollbar-thumb,
+.legend-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #ffeb3b, #ffd54f);
+  border-radius: 6px;
+  border: 2px solid rgba(26, 26, 26, 0.8);
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover,
+.legend-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #ffd54f, #ffeb3b);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0.6rem 1rem;
+    height: 60px;
+  }
+  
+  .app-header h1 { font-size: 1.2rem; }
+  .app-header p { font-size: 0.75rem; }
+  
+  .info-grid { grid-template-columns: 1fr; }
+  
+  .modal-content {
+    margin: 1rem;
+    max-height: 80vh;
+  }
+  
+  .modal-header, .modal-body { padding: 1.5rem; }
+  
+  .App::after { background-size: 200px 200px; }
+  
+  .legend-panel {
+    width: 280px;
+    right: 10px;
+    top: 70px;
+  }
+  
+  .legend-show-btn {
+    right: 10px;
+    top: 70px;
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header h1 { font-size: 1.1rem; }
+  .app-header p { font-size: 0.7rem; }
+  .modal-header h2 { font-size: 1.4rem; }
+  .App::after { background-size: 150px 150px; }
+  .legend-panel { width: calc(100vw - 40px); }
 }
