@@ -52,6 +52,11 @@ Es una **alerta visual**.
 
 Una herramienta para entender cómo un atacante ve tu red.  
 
+* * *
+
+## Instalación
+
+`git clone git@github.com:CarlosNadal/BlackSwan.git`
 
 * * *
 
