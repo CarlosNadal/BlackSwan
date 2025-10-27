@@ -58,6 +58,8 @@ sudo systemctl status blackswan-wifi
 # Para usar la interfaz, regresa al directorio principal y ejecuta:
 cd ../..
 ./start.sh  # Esto levantará el frontend y conectará con el servicio
+
+# Luego abre: http://localhost:5173
 ```
 **Ideal para:** Uso continuo, laboratorios, entornos controlados
 
