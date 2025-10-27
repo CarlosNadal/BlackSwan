@@ -150,8 +150,11 @@ BlackSwan/
 
 ## ⚠️ **Precauciones de Seguridad**
 
-### 🛡️ **Consideraciones Críticas**
+⚖️ **Legal:** Usá Black Swan exclusivamente en redes propias o con autorización explícita y por escrito.
 
+
+### 🛡️ **Consideraciones Críticas**
+- 
 - **Requiere Root**: Manipulación de interfaces wireless
 - **Entorno Controlado**: Usar en VM/laboratorio aislado
 - **Legalidad**: Solo en redes propias o autorizadas
