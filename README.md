@@ -212,13 +212,13 @@ Desde la raíz del repo (donde está start.sh):
 
 ## 🧩 Arquitectura técnica
 
-```
+```mermaid
 flowchart TD
     A[airmon-ng / airodump-ng] -->|Salida CSV| B[Parser Python]
     B -->|JSON estructurado| C[Backend Flask-SocketIO]
     C -->|Canal WebSocket| D[Frontend D3.js Graph]
     D -->|Interacción del usuario| C
-```
+
 
 💡 **Resumen:**
 
