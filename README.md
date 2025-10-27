@@ -108,8 +108,8 @@ Ejecutar la app:
 Ejecutar o gestionar el servicio:
 
 * `sudo systemctl status blackswan-wifi # Ver estado`
-* `sudosystemctl restart blackswan-wifi # Reiniciarsudo`
-* `systemctl stop blackswan-wifi # Detener`
+* `sudosystemctl restart blackswan-wifi # Reiniciar`
+* `sudo systemctl stop blackswan-wifi # Detener`
 * `sudo journalctl -u blackswan-wifi -f # Logs en tiempo real`
 
 > ⚠️ Solo el usuario dedicado y root pueden ejecutar los scripts protegidos.
