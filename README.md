@@ -3,7 +3,7 @@
 > *"When the attack is silent, invisible, and real… you need a new way to see."*
 
 * * *
-![Logo de BlackSwan](/black-swan-frontend/public/BlackSwan.png)
+![Logo de BlackSwan](/frontend/public/BlackSwan.png)
 
 ### 🦢 **Black Swan**
 
