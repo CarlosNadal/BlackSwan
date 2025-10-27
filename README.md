@@ -218,7 +218,7 @@ flowchart TD
     B -->|JSON estructurado| C[Backend Flask-SocketIO]
     C -->|Canal WebSocket| D[Frontend D3.js Graph]
     D -->|Interacción del usuario| C
-
+```
 
 💡 **Resumen:**
 
