@@ -212,7 +212,7 @@ Black Swan es **100% open source** y crece con la comunidad.
 
 ## 📜 **Licencia**
 
-Distribuido bajo **MIT License**. Ver `LICENSE` para más detalles.
+Distribuido bajo **MIT License**. Ver [LICENSE](LICENSE) para más detalles.
 
 > **"La verdadera seguridad no es ocultar las vulnerabilidades, sino entenderlas tan bien que pierdan su poder."**
 
