@@ -1,112 +1,69 @@
 #!/bin/bash
-# deploy.sh - Despliegue completo Black Swan WiFi Recon
-# Uso:
-#   sudo ./deploy.sh --prod  -> despliegue seguro (usuario dedicado, systemd)
-#   ./deploy.sh --dev        -> despliegue para desarrollo/lab (sin usuario dedicado, sin chown)
-set -euo pipefail
+# deploy.sh - Despliegue completo de Black Swan WiFi Recon
+# Uso: sudo ./deploy.sh
+
+set -e  # Detener en caso de error
 
 cd "$(dirname "$0")"
 
-MODE="prod"
-if [[ "${1:-}" == "--dev" ]]; then
-    MODE="dev"
-fi
+echo "🚀 Black Swan WiFi Recon - Despliegue completo"
+echo "=============================================="
 
-echo "🚀 Black Swan WiFi Recon - Despliegue ($MODE mode)"
-echo "================================================"
-
-CURRENT_DIR=$(pwd)
-SERVICE_FILE="/etc/systemd/system/blackswan-wifi.service"
-LOG_DIR="/var/log/blackswan"
-ENV_FILE="/etc/default/blackswan-wifi"
-
-INTERFACE="wlan0"
-PORT="8000"
-
-# =======================
-# DEV mode (labs / debug)
-# =======================
-if [[ "$MODE" == "dev" ]]; then
-    echo "🔧 Modo desarrollo / laboratorio"
-    # venv
-    if [ ! -d "venv" ]; then
-        echo "📦 Creando venv..."
-        python3 -m venv venv
-    fi
-    source venv/bin/activate
-    pip install --upgrade pip setuptools wheel greenlet
-    pip install flask flask-socketio flask-cors eventlet
-    echo "✅ venv listo"
-
-    echo "🐍 Para ejecutar: source venv/bin/activate && python3 main.py"
-    echo "⚠️ No se creó usuario dedicado ni systemd"
-    exit 0
-fi
-
-# =======================
-# PROD mode
-# =======================
-# Requiere root
+# Verificar que estamos como root
 if [ "$EUID" -ne 0 ]; then
-    echo "❌ Este script requiere sudo/root"
+    echo "❌ Este script requiere permisos de root (sudo)"
+    echo "💡 Ejecuta con: sudo ./deploy.sh"
     exit 1
 fi
 
-# Preguntar nombre de usuario dedicado
-read -r -p "Nombre del usuario de servicio [black-swan]: " SERVICE_USER
-SERVICE_USER=${SERVICE_USER:-black-swan}
-echo "👤 Usuario de servicio: $SERVICE_USER"
-
-# Crear usuario si no existe
-if ! id "$SERVICE_USER" &>/dev/null; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
-    echo "✅ Usuario creado"
+# Paso 1: Verificar e instalar dependencias del sistema
+echo ""
+echo "📦 Paso 1: Verificando dependencias del sistema..."
+if ! command -v airodump-ng &> /dev/null; then
+    echo "❌ airodump-ng no encontrado"
+    echo "💡 Instalando aircrack-ng..."
+    apt update && apt install -y aircrack-ng
+else
+    echo "✅ airodump-ng encontrado"
 fi
 
-# Dependencias del sistema
-echo "📦 Verificando dependencias..."
-for pkg in airodump-ng python3 python3-venv python3-pip; do
-    if ! command -v "$pkg" &>/dev/null; then
-        echo "❌ $pkg no encontrado, instalando..."
-        apt update && apt install -y "$pkg"
-    else
-        echo "✅ $pkg encontrado"
-    fi
-done
+if ! command -v python3 &> /dev/null; then
+    echo "❌ python3 no encontrado"
+    echo "💡 Instalando python3..."
+    apt install -y python3 python3-venv python3-pip
+else
+    echo "✅ python3 encontrado"
+fi
 
-# venv y permisos mínimos
+# Paso 2: Configurar entorno virtual
+echo ""
+echo "🔧 Paso 2: Configurando entorno virtual..."
 if [ ! -d "venv" ]; then
+    echo "📦 Creando entorno virtual..."
     python3 -m venv venv
+    echo "✅ Entorno virtual creado"
+else
+    echo "✅ Entorno virtual ya existe"
 fi
-chown -R "$SERVICE_USER":"$SERVICE_USER" venv
-find venv -type d -exec chmod 750 {} \;
-find venv -type f -exec chmod 640 {} \;
-chmod 750 venv/bin/{activate,python3,pip} || true
 
-# instalar deps python
-sudo -u "$SERVICE_USER" venv/bin/pip install --upgrade pip setuptools wheel greenlet
-sudo -u "$SERVICE_USER" venv/bin/pip install flask flask-socketio flask-cors eventlet
+# Activar entorno virtual
+source venv/bin/activate
 
-# permisos mínimos en scripts
-EXEC_FILES=("main.py" "start.sh" "stopservice.sh" "restart.sh")
-for f in "${EXEC_FILES[@]}"; do
-    if [ -f "$f" ]; then
-        chown "$SERVICE_USER":"$SERVICE_USER" "$f"
-        chmod 750 "$f"
-    fi
-done
+# Paso 3: Instalar/actualizar dependencias Python
+echo ""
+echo "📥 Instalando dependencias Python..."
+pip install --upgrade pip setuptools wheel greenlet
+pip install flask flask-socketio flask-cors eventlet
 
-# logs
-mkdir -p "$LOG_DIR"
-chown "$SERVICE_USER":"$SERVICE_USER" "$LOG_DIR"
-chmod 750 "$LOG_DIR"
+echo "✅ Dependencias Python instaladas correctamente"
 
-# EnvironmentFile
-echo "INTERFACE=$INTERFACE" > "$ENV_FILE"
-echo "PORT=$PORT" >> "$ENV_FILE"
-chmod 644 "$ENV_FILE"
+# Paso 4: Crear servicio systemd
+echo ""
+echo "⚙️ Paso 4: Configurando servicio systemd..."
 
-# Crear service systemd
+SERVICE_FILE="/etc/systemd/system/blackswan-wifi.service"
+CURRENT_DIR=$(pwd)
+
 cat > /tmp/blackswan-wifi.service << EOF
 [Unit]
 Description=Black Swan WiFi Reconnaissance
@@ -115,44 +72,89 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_USER
+User=root
 WorkingDirectory=$CURRENT_DIR
-ExecStart=$CURRENT_DIR/venv/bin/python3 $CURRENT_DIR/main.py
-Restart=on-failure
+ExecStart=$CURRENT_DIR/venv/bin/python3 main.py
+Restart=always
 RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=60
-EnvironmentFile=$ENV_FILE
+Environment=INTERFACE=wlan0
+Environment=PORT=8000
+
+# Seguridad
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=$CURRENT_DIR $LOG_DIR /tmp
-LimitNOFILE=65536
-TasksMax=200
+ReadWritePaths=$CURRENT_DIR /tmp
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-mv /tmp/blackswan-wifi.service "$SERVICE_FILE"
-chmod 644 "$SERVICE_FILE"
+mv /tmp/blackswan-wifi.service $SERVICE_FILE
+chmod 644 $SERVICE_FILE
 
+echo "✅ Servicio creado: $SERVICE_FILE"
+
+# Paso 5: Configurar permisos y recargar systemd
+echo ""
+echo "🔐 Paso 5: Configurando permisos..."
 systemctl daemon-reload
-systemctl enable --now blackswan-wifi
-systemctl restart blackswan-wifi
+echo "✅ Systemd recargado"
 
-sleep 2
-SERVICE_STATUS=$(systemctl is-active blackswan-wifi)
-if [ "$SERVICE_STATUS" = "active" ]; then
-    echo "✅ Servicio corriendo (usuario: $SERVICE_USER)"
-else
-    echo "❌ Servicio no arrancó, revisa logs con sudo journalctl -u blackswan-wifi -n 50"
+# Paso 6: Verificar dependencias antes de iniciar
+echo ""
+echo "🧪 Paso 6: Verificando importaciones..."
+if ! python3 - << 'EOF'
+try:
+    import flask, flask_socketio, flask_cors, eventlet
+    print("✅ Importaciones OK")
+except Exception as e:
+    print("❌ Error:", e)
+    exit(1)
+EOF
+then
+    echo "❌ Error en dependencias Python"
+    exit 1
 fi
 
-echo "🎉 Despliegue completado"
-echo "⚠️ Solo el usuario '$SERVICE_USER' (y root) puede ejecutar main.py y scripts listados"
-echo "📋 Comandos útiles:"
-echo " sudo systemctl status blackswan-wifi"
-echo " sudo journalctl -u blackswan-wifi -f"
+# Paso 7: Iniciar y habilitar el servicio
+echo ""
+echo "⚡ Paso 7: Iniciando servicio..."
+systemctl enable blackswan-wifi
+systemctl restart blackswan-wifi
+sleep 3
+
+# Paso 8: Verificar estado del servicio
+echo ""
+echo "📊 Verificando estado del servicio..."
+SERVICE_STATUS=$(systemctl is-active blackswan-wifi)
+
+if [ "$SERVICE_STATUS" = "active" ]; then
+    echo "✅ Servicio ejecutándose correctamente"
+else
+    echo "❌ El servicio no se pudo iniciar"
+    echo "💡 Revisa los logs con: sudo journalctl -u blackswan-wifi -n 20"
+    exit 1
+fi
+
+# Mostrar información final
+echo ""
+echo "🎉 ¡Despliegue completado exitosamente!"
+echo "======================================="
+echo ""
+echo "📋 Comandos de gestión:"
+echo "   sudo systemctl status blackswan-wifi    # Ver estado del servicio"
+echo "   sudo journalctl -u blackswan-wifi -f    # Ver logs en tiempo real"
+echo "   sudo systemctl stop blackswan-wifi      # Detener servicio"
+echo "   sudo systemctl restart blackswan-wifi   # Reiniciar servicio"
+echo "   sudo systemctl disable blackswan-wifi   # Deshabilitar inicio automático"
+echo ""
+echo "🌐 URLs de acceso:"
+echo "   WebSocket: http://$(hostname -I | awk '{print $1}'):8000"
+echo "   HTTP API:  http://$(hostname -I | awk '{print $1}'):8000/scan"
+echo ""
+echo "📝 Últimos logs del servicio:"
+journalctl -u blackswan-wifi -n 5 --no-pager
+echo ""
+echo "💡 Para más logs: sudo journalctl -u blackswan-wifi -f"
