@@ -132,6 +132,8 @@ BlackSwan/
 ├── 🔧 backend/recon/
 │   ├── main.py              # Servidor principal Flask
 │   ├── deploy.sh            # Instalador sistema
+|   ├── stop-service.sh      # Detiene el servicio
+|   ├── uninstall.sh         # Desinstalar el servicio         
 │   └── restart_service.sh   # Utilidades gestión
 ├── 🎨 frontend/
 │   ├── src/                 # Código React/D3.js
