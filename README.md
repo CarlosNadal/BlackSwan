@@ -54,6 +54,9 @@ sudo ./deploy.sh
 
 # Verificar instalación
 sudo systemctl status blackswan-wifi
+
+# Ejecuta ./start.sh para levantar todo el sistema con un solo comando
+cd ../../start.sh
 ```
 **Ideal para:** Uso continuo, laboratorios, entornos controlados
 
