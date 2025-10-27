@@ -5,7 +5,7 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/CarlosNadal/BlackSwan?style=for-the-badge&logo=github&labelColor=000000&color=FFD300)
 ![GitHub last commit](https://img.shields.io/github/last-commit/CarlosNadal/BlackSwan?style=for-the-badge&logo=git&labelColor=000000&color=FFD300)
 ![GitHub issues](https://img.shields.io/github/issues/CarlosNadal/BlackSwan?style=for-the-badge&logo=github&labelColor=000000&color=FFD300)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge&logo=open-source-initiative&logoColor=white&labelColor=000000)
+![License](https://img.shields.io/badge/License-MIT-FFD300?style=for-the-badge&logo=open-source-initiative&logoColor=000000&labelColor=000000)
 ![Made with Python](https://img.shields.io/badge/Made%20with-Python-FFD300?style=for-the-badge&logo=python&logoColor=FFD300&labelColor=000000)
 ![Frontend](https://img.shields.io/badge/Frontend-D3.js%20%2B%20Node.js-FFD300?style=for-the-badge&logo=node.js&logoColor=FFD300&labelColor=000000)
 ![Deploy](https://img.shields.io/badge/Deploy-Systemd-FFD300?style=for-the-badge&logo=linux&labelColor=000000)
