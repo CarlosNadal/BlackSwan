@@ -58,6 +58,88 @@ Una herramienta para entender cómo un atacante ve tu red.
 
 `git clone git@github.com:CarlosNadal/BlackSwan.git`
 
+
+## 🛠️ Despliegue y modos de ejecución
+
+Black Swan ofrece dos modos de despliegue: **desarrollo/laboratorio** y **producción segura**.
+
+`cd backend/recon`
+
+### 1️⃣ Modo desarrollo / laboratorio (`--dev`)
+
+`./deploy.sh --dev`
+
+- Crea un **entorno virtual (venv)** en tu repo si no existe.
+    
+- Instala dependencias Python necesarias (`flask`, `flask-socketio`, `flask-cors`, `eventlet`).
+        
+- Ideal para: **laboratorios, pruebas, desarrollo rápido**.
+    
+
+Ejecutar la app:
+
+`source venv/bin/activatepython3 main.py`
+
+> ⚠️ Todo corre con tu usuario actual. No hay restricciones adicionales.
+
+* * *
+
+### 2️⃣ Modo producción segura (`--prod`)
+
+`sudo ./deploy.sh --prod`
+
+- Crea un **usuario dedicado** (por defecto `black-swan`) para ejecutar el servicio.
+    
+- Instala dependencias del sistema y Python si no existen.
+    
+- Protege el **venv** y los scripts (`main.py`, `start.sh`, `stopservice.sh`, `restart.sh`) para que solo el usuario del servicio y root puedan ejecutarlos.
+    
+- Crea un **servicio systemd** con:
+    
+    - Hardening básico (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem`, `ProtectHome`).
+        
+    - Límites de reinicio (`StartLimitBurst`, `StartLimitIntervalSec`) y recursos (`LimitNOFILE`, `TasksMax`).
+        
+    - EnvironmentFile para cambiar `INTERFACE` y `PORT` sin modificar el unit.
+        
+- Logs separados en `/var/log/blackswan`.
+    
+
+Ejecutar o gestionar el servicio:
+
+`sudo systemctl status blackswan-wifi # Ver estadosudo`
+`systemctl restart blackswan-wifi # Reiniciarsudo`
+`systemctl stop blackswan-wifi # Detener`
+`sudo journalctl -u blackswan-wifi -f # Logs en tiempo real`
+
+> ⚠️ Solo el usuario dedicado y root pueden ejecutar los scripts protegidos.
+
+* * *
+
+### 🔄 Cambiar interface o puerto
+
+Edite el archivo `/etc/default/blackswan-wifi`:
+
+`INTERFACE=wlan0`
+`PORT=8000`
+
+Luego reinicie el servicio:
+
+`sudo systemctl restart blackswan-wifi`
+
+* * *
+
+### 📝 Recomendaciones
+
+- Para **labs y desarrollo rápido**, usar `--dev` es suficiente.
+    
+- Para **simular un entorno seguro o red team**, usar `--prod`.
+    
+- Siempre revisa permisos y logs después del despliegue:
+    
+
+`ls -l venv main.py /var/log/blackswansudo journalctl -u blackswan-wifi -n 50`
+
 * * *
 
 ## 📢 Llamado a la comunidad
